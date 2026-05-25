@@ -15,6 +15,7 @@ const PORT = Number(process.env.PORT || 3000);
 const SUPABASE_URL = normalizeSupabaseUrl(process.env.SUPABASE_URL);
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY);
+const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 const sessions = new Map();
 
 const MIME_TYPES = {
@@ -41,6 +42,10 @@ export default async function handler(request, response) {
     await serveStatic(response, url.pathname);
   } catch (error) {
     console.error(error);
+    if (error.code === "CONFIGURATION_ERROR") {
+      sendJson(response, 500, { error: error.message });
+      return;
+    }
     sendJson(response, 500, { error: "Internal server error" });
   }
 }
@@ -54,7 +59,13 @@ if (isDirectRun()) {
 
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
-    sendJson(response, 200, { ok: true, service: "timo", time: new Date().toISOString() });
+    sendJson(response, 200, {
+      ok: true,
+      service: "timo",
+      storage: USE_SUPABASE ? "supabase" : "local",
+      serverless: IS_SERVERLESS,
+      time: new Date().toISOString(),
+    });
     return;
   }
 
@@ -223,6 +234,7 @@ async function getUserByEmail(email) {
     return rows[0] ? fromSupabaseUser(rows[0]) : null;
   }
 
+  ensureLocalStorageAvailable();
   const db = await readDb();
   return db.users[email] || null;
 }
@@ -237,6 +249,7 @@ async function createUser(user) {
     return;
   }
 
+  ensureLocalStorageAvailable();
   const db = await readDb();
   db.users[user.email] = user;
   await writeDb(db);
@@ -257,6 +270,7 @@ async function updateUserState(user, state) {
     return;
   }
 
+  ensureLocalStorageAvailable();
   const db = await readDb();
   const current = db.users[email];
   if (!current) return;
@@ -341,9 +355,17 @@ async function deleteUserByEmail(email) {
     return;
   }
 
+  ensureLocalStorageAvailable();
   const db = await readDb();
   delete db.users[email];
   await writeDb(db);
+}
+
+function ensureLocalStorageAvailable() {
+  if (!IS_SERVERLESS) return;
+  const error = new Error("Supabase environment variables are required in Vercel.");
+  error.code = "CONFIGURATION_ERROR";
+  throw error;
 }
 
 async function supabaseRequest(path, options = {}) {
