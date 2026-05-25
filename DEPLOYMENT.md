@@ -20,16 +20,27 @@ Keep the service role key server-side only. Do not put it in browser JavaScript.
 Create a `.env` file from `.env.example`, then run:
 
 ```bash
-SUPABASE_URL="https://your-project-ref.supabase.co" \
-SUPABASE_SERVICE_ROLE_KEY="your-service-role-key" \
 npm start
 ```
 
 Open `http://localhost:3000`.
 
-## 4. Deploy
+## 4. Deploy to Vercel
 
-Use any Node hosting service such as Render, Railway, Fly.io, or a VPS.
+1. Push the latest code to GitHub.
+2. Open Vercel and choose **Add New > Project**.
+3. Import `doyeon616/timo`.
+4. Keep the default framework preset as **Other**.
+5. Add Environment Variables:
+   - `SUPABASE_URL`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+6. Deploy.
+
+Vercel serves the frontend as static files and routes `/api/*` to `api/index.mjs`.
+
+## 5. Other Node Hosts
+
+You can also use Render, Railway, Fly.io, or a VPS.
 
 Set:
 

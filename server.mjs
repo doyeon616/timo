@@ -1,5 +1,5 @@
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { createReadStream } from "node:fs";
+import { createReadStream, readFileSync } from "node:fs";
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { extname, join, normalize, relative, resolve } from "node:path";
@@ -7,6 +7,8 @@ import { fileURLToPath } from "node:url";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 const ROOT_DIR = resolve(__dirname);
+loadEnvFile(join(ROOT_DIR, ".env"));
+
 const DATA_DIR = join(ROOT_DIR, ".data");
 const DB_PATH = join(DATA_DIR, "db.json");
 const PORT = Number(process.env.PORT || 3000);
@@ -28,7 +30,7 @@ const MIME_TYPES = {
   ".woff2": "font/woff2",
 };
 
-createServer(async (request, response) => {
+export default async function handler(request, response) {
   try {
     const url = new URL(request.url || "/", `http://${request.headers.host || "localhost"}`);
     if (url.pathname.startsWith("/api/")) {
@@ -41,10 +43,14 @@ createServer(async (request, response) => {
     console.error(error);
     sendJson(response, 500, { error: "Internal server error" });
   }
-}).listen(PORT, () => {
-  console.log(`Timo server running at http://localhost:${PORT}`);
-  console.log(`Storage: ${USE_SUPABASE ? "Supabase" : "local file"}`);
-});
+}
+
+if (isDirectRun()) {
+  createServer(handler).listen(PORT, () => {
+    console.log(`Timo server running at http://localhost:${PORT}`);
+    console.log(`Storage: ${USE_SUPABASE ? "Supabase" : "local file"}`);
+  });
+}
 
 async function handleApi(request, response, url) {
   if (request.method === "GET" && url.pathname === "/api/health") {
@@ -196,6 +202,21 @@ async function writeDb(db) {
   await writeFile(DB_PATH, JSON.stringify(db, null, 2));
 }
 
+function loadEnvFile(filePath) {
+  try {
+    const lines = readFileSync(filePath, "utf8").split(/\r?\n/);
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#") || !trimmed.includes("=")) continue;
+      const [key, ...valueParts] = trimmed.split("=");
+      if (process.env[key]) continue;
+      process.env[key] = valueParts.join("=").trim().replace(/^["']|["']$/g, "");
+    }
+  } catch {
+    // .env is optional. Hosted environments should use platform env vars.
+  }
+}
+
 async function getUserByEmail(email) {
   if (USE_SUPABASE) {
     const rows = await supabaseRequest(`/timo_users?email=eq.${encodeURIComponent(email)}&select=*`);
@@ -329,6 +350,10 @@ function normalizeEmail(email) {
 
 function normalizeSupabaseUrl(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function isDirectRun() {
+  return process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 }
 
 function getBearerToken(request) {
