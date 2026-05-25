@@ -6,6 +6,11 @@
 2. Open **SQL Editor**.
 3. Run the SQL in `supabase/schema.sql`.
 
+This creates:
+
+- `timo_users`: account records and the full app-state snapshot.
+- `timo_tasks`: one row per task so tasks can be queried, filtered, audited, and tracked over time.
+
 ## 2. Get Supabase environment values
 
 In Supabase, open **Project Settings > API** and copy:

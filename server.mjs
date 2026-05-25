@@ -122,7 +122,7 @@ async function handleApi(request, response, url) {
 
   if (request.method === "PUT" && url.pathname === "/api/state") {
     const body = await readJsonBody(request);
-    await updateUserState(user.email, body.state || null);
+    await updateUserState(user, body.state || null);
     sendJson(response, 200, { ok: true });
     return;
   }
@@ -242,7 +242,8 @@ async function createUser(user) {
   await writeDb(db);
 }
 
-async function updateUserState(email, state) {
+async function updateUserState(user, state) {
+  const email = typeof user === "string" ? user : user.email;
   if (USE_SUPABASE) {
     await supabaseRequest(`/timo_users?email=eq.${encodeURIComponent(email)}`, {
       method: "PATCH",
@@ -252,6 +253,7 @@ async function updateUserState(email, state) {
       },
       headers: { Prefer: "return=minimal" },
     });
+    if (typeof user !== "string") await syncTasksForUser(user, state);
     return;
   }
 
@@ -261,6 +263,73 @@ async function updateUserState(email, state) {
   current.state = state;
   current.updatedAt = new Date().toISOString();
   await writeDb(db);
+}
+
+async function syncTasksForUser(user, state) {
+  const taskRows = getTaskRowsFromState(user.id, state);
+  const now = new Date().toISOString();
+
+  if (taskRows.length > 0) {
+    await supabaseRequest("/timo_tasks?on_conflict=user_id,id", {
+      method: "POST",
+      body: taskRows.map((row) => ({
+        ...row,
+        deleted_at: null,
+        synced_at: now,
+        updated_at: now,
+      })),
+      headers: { Prefer: "resolution=merge-duplicates,return=minimal" },
+    });
+  }
+
+  await markMissingTasksDeleted(user.id, taskRows.map((task) => task.id), now);
+}
+
+async function markMissingTasksDeleted(userId, activeTaskIds, deletedAt) {
+  const idFilter =
+    activeTaskIds.length > 0
+      ? `&id=not.in.(${activeTaskIds.map((id) => `"${escapePostgrestListValue(id)}"`).join(",")})`
+      : "";
+
+  await supabaseRequest(`/timo_tasks?user_id=eq.${encodeURIComponent(userId)}&deleted_at=is.null${idFilter}`, {
+    method: "PATCH",
+    body: {
+      deleted_at: deletedAt,
+      synced_at: deletedAt,
+      updated_at: deletedAt,
+    },
+    headers: { Prefer: "return=minimal" },
+  });
+}
+
+function getTaskRowsFromState(userId, state) {
+  if (!state?.days || typeof state.days !== "object") return [];
+
+  return Object.entries(state.days).flatMap(([date, day]) => {
+    if (!Array.isArray(day?.tasks)) return [];
+    return day.tasks.filter((task) => task?.id && task?.name).map((task) => toTaskRow(userId, date, task));
+  });
+}
+
+function toTaskRow(userId, date, task) {
+  return {
+    user_id: userId,
+    id: String(task.id),
+    task_date: date,
+    name: String(task.name || ""),
+    tag: task.tag ? String(task.tag) : null,
+    estimate_minutes: toInteger(task.estimateMinutes),
+    note: task.note ? String(task.note) : null,
+    status: task.status ? String(task.status) : "pending",
+    priority: task.priority ? String(task.priority) : null,
+    actual_seconds: toInteger(task.actualSeconds),
+    extensions: toInteger(task.extensions),
+    task_order: toNullableNumber(task.order),
+    timebox_order: toNullableNumber(task.timeboxOrder),
+    timebox_start_minute: toNullableInteger(task.timeboxStartMinute),
+    timebox_duration_minutes: toNullableInteger(task.timeboxDurationMinutes),
+    raw_task: task,
+  };
 }
 
 async function deleteUserByEmail(email) {
@@ -354,6 +423,25 @@ function normalizeSupabaseUrl(value) {
 
 function isDirectRun() {
   return process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+}
+
+function toInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : 0;
+}
+
+function toNullableInteger(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? Math.trunc(number) : null;
+}
+
+function toNullableNumber(value) {
+  const number = Number(value);
+  return Number.isFinite(number) ? number : null;
+}
+
+function escapePostgrestListValue(value) {
+  return String(value).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
 }
 
 function getBearerToken(request) {
