@@ -1383,6 +1383,7 @@ function renderTimeboxes() {
     block.setAttribute("aria-disabled", String(task.status === "done" || Boolean(state.active)));
     block.classList.toggle("is-compact", height < 48);
     block.classList.toggle("is-short", isShortTimebox);
+    block.classList.toggle("is-tiny", height <= 30);
     block.innerHTML = `
       <strong>${escapeHtml(task.name)}</strong>
       <span>${formatMinutes(durationMinutes)}</span>

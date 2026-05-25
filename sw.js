@@ -1,11 +1,11 @@
-const CACHE_NAME = "timo-v173";
+const CACHE_NAME = "timo-v174";
 const APP_FILES = [
   "./",
   "./index.html",
-  "./variables.css?v=173",
-  "./theme.css?v=173",
-  "./styles.css?v=173",
-  "./app.js?v=173",
+  "./variables.css?v=174",
+  "./theme.css?v=174",
+  "./styles.css?v=174",
+  "./app.js?v=174",
   "./new%20logo.svg",
   "./goorm sans 2/Web/TTF/goorm-sans-regular.woff2",
   "./goorm sans 2/Web/TTF/goorm-sans-medium.woff2",

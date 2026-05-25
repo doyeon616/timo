@@ -1224,6 +1224,23 @@ button:disabled {
   line-height: 1;
 }
 
+.timebox-block.is-tiny {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  padding: 1px var(--spacing-6, 6px);
+}
+
+.timebox-block.is-tiny strong {
+  display: block;
+  min-width: 0;
+  font-size: 9px;
+  line-height: 1;
+}
+
+.timebox-block.is-tiny span {
+  display: none;
+}
+
 .timebox-block.high {
   background: linear-gradient(135deg, #f24e1e, #d82f16);
 }
