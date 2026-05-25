@@ -1,0 +1,308 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0a0a0a" />
+    <title>Timo - Timeboxed Tasks</title>
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <link rel="icon" href="./new%20logo.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./new%20logo.svg" />
+    <link rel="stylesheet" href="./variables.css?v=173" />
+    <link rel="stylesheet" href="./theme.css?v=173" />
+    <link rel="stylesheet" href="./styles.css?v=173" />
+  </head>
+  <body>
+    <section class="login-screen" id="loginScreen" aria-label="Login">
+      <form class="login-panel" id="loginForm">
+        <div class="login-panel-header">
+          <div>
+            <p class="login-greeting">Welcome</p>
+          </div>
+          <button class="auth-switch-button" id="authSwitchButton" data-auth-mode="login" type="button">Log in</button>
+        </div>
+        <label id="loginNameField">
+          <span>Name</span>
+          <input id="loginName" type="text" autocomplete="name" placeholder="Your name" required />
+        </label>
+        <label>
+          <span>Email</span>
+          <input id="loginEmail" type="text" autocomplete="email" placeholder="you@example.com" required />
+        </label>
+        <label>
+          <span>Password</span>
+          <input id="loginPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required />
+        </label>
+        <p class="auth-status" id="authStatus" aria-live="polite"></p>
+        <button class="primary-button" id="loginButton" type="button" onclick="window.loginTimo?.()">Create account</button>
+      </form>
+    </section>
+
+    <div class="app-shell is-hidden" id="appShell">
+      <header class="topbar">
+        <div class="brand-stack">
+          <div class="month-year-label" id="monthYearLabel"></div>
+          <div class="month-progress-label" id="monthProgressLabel"></div>
+        </div>
+      </header>
+
+      <main>
+        <section class="workspace">
+          <div class="plan-panel">
+            <div class="todo-dock">
+              <p class="todo-caption">To do</p>
+              <div class="task-list" id="taskList" aria-live="polite"></div>
+            </div>
+          </div>
+
+          <aside class="side-stack" aria-label="Today execution">
+            <section class="summary-grid is-hidden" aria-label="Today summary">
+              <article class="metric">
+                <span>Available Time</span>
+                <strong id="capacityText">0h</strong>
+                <label class="capacity-control">
+                  <input id="capacityInput" type="number" min="1" max="16" step="0.5" />
+                  <span>hours</span>
+                </label>
+              </article>
+              <article class="metric">
+                <span>Planned Time</span>
+                <strong id="plannedText">0m</strong>
+                <small id="overloadText">Add today’s plan</small>
+              </article>
+              <article class="metric">
+                <span>Done</span>
+                <strong id="doneText">0 / 0</strong>
+                <small id="actualText">0m actual</small>
+              </article>
+            </section>
+
+            <div class="focus-panel">
+              <button class="ghost-button is-hidden" id="finishDayButton" type="button">End Day</button>
+
+              <div class="date-browser" aria-label="Selected date">
+                <button class="date-step-button is-prev" id="prevDateButton" type="button" aria-label="Previous day">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+                <div class="date-pill" id="selectedDateLabel"></div>
+                <button class="date-step-button" id="nextDateButton" type="button" aria-label="Next day">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
+                </button>
+              </div>
+
+              <div class="focus-tabs" role="tablist" aria-label="Timebox view switcher">
+                <button class="tab-button is-active" id="timeboxTab" data-view="timebox" type="button" role="tab" aria-selected="true">
+                  Timebox
+                </button>
+                <button class="tab-button" id="timerTab" data-view="timer" type="button" role="tab" aria-selected="false">Timer</button>
+              </div>
+
+              <div class="tab-panel timebox-panel" id="timeboxPanel" role="tabpanel" aria-labelledby="timeboxTab">
+                <div class="timebox-meta">
+                  <span id="timeboxMeta">View today’s tasks as time blocks</span>
+                </div>
+                <div class="timebox-visual">
+                  <div class="time-axis" id="timeAxis"></div>
+                  <div class="timebox-track" id="timeboxTrack"></div>
+                </div>
+              </div>
+
+              <div class="timer-card tab-panel is-hidden" id="timerCard" role="tabpanel" aria-labelledby="timerTab">
+                <button class="timer-full-close" id="timerFullViewCloseButton" type="button" aria-label="Exit full view">×</button>
+                <p class="timer-state" id="timerState"></p>
+                <h3 id="activeTaskName">Select a task to start</h3>
+                <div class="timer-ring">
+                  <svg viewBox="0 0 120 120" aria-hidden="true">
+                    <circle class="ring-bg" cx="60" cy="60" r="52"></circle>
+                    <circle class="ring-progress" id="ringProgress" cx="60" cy="60" r="52"></circle>
+                  </svg>
+                  <strong id="timerText">00:00</strong>
+                </div>
+                <div class="timer-actions">
+                  <button class="primary-button" id="pauseResumeButton" type="button" disabled>Pause</button>
+                  <button class="ghost-button" id="stopButton" type="button" disabled>Stop</button>
+                  <button class="ghost-button" id="timerFullViewButton" type="button">Full view</button>
+                </div>
+              </div>
+
+            </div>
+          </aside>
+        </section>
+
+        <section class="panel report-panel" id="reportPanel">
+          <div class="section-head">
+            <div>
+              <p class="eyebrow">Review</p>
+              <h2>End-of-Day Report</h2>
+            </div>
+            <button class="ghost-button" id="hideReportButton" type="button">Collapse</button>
+          </div>
+          <div class="report-grid">
+            <div class="report-card">
+              <span>Planned vs Actual</span>
+              <strong id="reportTime">0m / 0m</strong>
+            </div>
+            <div class="report-card">
+              <span>Completion</span>
+              <strong id="reportDone">0%</strong>
+            </div>
+            <div class="report-card">
+              <span>Overruns</span>
+              <strong id="reportOverruns">0</strong>
+            </div>
+          </div>
+          <div class="bars" id="reportBars"></div>
+        </section>
+      </main>
+      <form class="bottom-nav" id="taskForm">
+        <input id="taskName" type="text" placeholder="Add a task" autocomplete="off" required />
+        <select id="taskTag" aria-label="Tag"></select>
+        <datalist id="tagOptions"></datalist>
+        <select id="taskMinutes" aria-label="Estimated time">
+          <option value="15">15m</option>
+          <option value="25">25m</option>
+          <option value="30" selected>30m</option>
+          <option value="45">45m</option>
+          <option value="60">60m</option>
+          <option value="90">90m</option>
+          <option value="120">120m</option>
+        </select>
+        <button class="primary-button" type="submit">Add</button>
+      </form>
+    </div>
+
+    <div class="completion-panel is-hidden" id="completionPanel" role="dialog" aria-modal="true" aria-label="Timebox finished">
+      <div class="completion-card">
+        <p>How should this timebox end?</p>
+        <label class="extension-control">
+          <span>Extend by</span>
+          <select id="extensionMinutes" aria-label="Extension time">
+            <option value="5">5m</option>
+            <option value="10" selected>10m</option>
+            <option value="15">15m</option>
+            <option value="20">20m</option>
+            <option value="30">30m</option>
+            <option value="45">45m</option>
+            <option value="60">60m</option>
+          </select>
+        </label>
+        <div class="completion-actions">
+          <button class="success-button" data-action="complete" type="button">Done</button>
+          <button class="primary-button" data-action="extend" type="button">Extend</button>
+          <button class="ghost-button" data-action="pause" type="button">Pause</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="account-modal is-hidden" id="accountModal" role="dialog" aria-modal="true" aria-label="Account">
+      <div class="account-card">
+        <button class="account-close" id="accountCloseButton" type="button" aria-label="Close account">×</button>
+        <p class="eyebrow">Account</p>
+        <dl>
+          <div>
+            <dt>Name</dt>
+            <dd id="accountName"></dd>
+          </div>
+          <div>
+            <dt>Email</dt>
+            <dd id="accountEmail"></dd>
+          </div>
+        </dl>
+        <button class="ghost-button" id="logoutButton" type="button">Log out</button>
+        <button class="danger-button" id="deleteAccountButton" type="button">Delete account</button>
+      </div>
+    </div>
+
+    <div class="task-modal is-hidden" id="taskModal" role="dialog" aria-modal="true" aria-label="Edit task">
+      <form class="task-edit-card" id="taskEditForm">
+        <div class="task-edit-toolbar">
+          <span id="taskEditDate"></span>
+          <div class="task-edit-tools">
+            <button class="task-tool-button delete-task-button" id="taskDeleteButton" type="button" aria-label="Delete task">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                <path d="M3 6h18" />
+                <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+            </button>
+            <button class="task-tool-button" id="taskEditCloseButton" type="button" aria-label="Close task editor">
+              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M18 6 6 18" />
+                <path d="m6 6 12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+        <label class="task-title-field">
+          <input id="taskEditName" type="text" autocomplete="off" required />
+        </label>
+        <div class="task-edit-divider"></div>
+        <div class="task-edit-grid">
+          <label>
+            <span>Tag</span>
+            <select id="taskEditTag"></select>
+          </label>
+          <label>
+            <span>Estimated Time</span>
+            <select id="taskEditMinutes">
+              <option value="15">15m</option>
+              <option value="25">25m</option>
+              <option value="30">30m</option>
+              <option value="45">45m</option>
+              <option value="60">60m</option>
+              <option value="90">90m</option>
+              <option value="120">120m</option>
+            </select>
+          </label>
+          <label>
+            <span>Status</span>
+            <select id="taskEditStatus">
+              <option value="pending">Pending</option>
+              <option value="review">Needs review</option>
+              <option value="paused">Paused</option>
+              <option value="done">Done</option>
+            </select>
+          </label>
+        </div>
+        <textarea id="taskEditNote" placeholder="Add a memo..."></textarea>
+        <button class="primary-button" id="taskSaveButton" type="submit" disabled>Save Changes</button>
+      </form>
+    </div>
+
+    <button class="corner-menu-button" id="accountButton" type="button" aria-label="Open my page" onclick="window.openAccountModal ? window.openAccountModal() : document.getElementById('accountModal')?.classList.remove('is-hidden')">
+      <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+        <circle cx="12" cy="7" r="4" />
+      </svg>
+      <span class="account-initial" id="accountInitial" aria-hidden="true"></span>
+    </button>
+
+    <template id="taskTemplate">
+      <article class="task-item">
+        <div class="task-main">
+          <div class="task-title-row">
+            <input class="task-check" type="checkbox" aria-label="Complete task" />
+            <strong></strong>
+            <span class="task-tag"></span>
+            <span class="task-estimate"></span>
+          </div>
+          <small></small>
+        </div>
+        <div class="task-actions">
+          <button class="icon-button start" type="button" aria-label="Start timebox">
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M5 5a2 2 0 0 1 3.008-1.728l11.997 6.998a2 2 0 0 1 .003 3.458l-12 7A2 2 0 0 1 5 19z" />
+            </svg>
+          </button>
+          <button class="icon-button delete" type="button" aria-label="Delete">×</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="./app.js?v=173" defer></script>
+  </body>
+</html>

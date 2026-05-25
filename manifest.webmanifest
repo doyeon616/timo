@@ -1,0 +1,17 @@
+{
+  "name": "Timo",
+  "short_name": "Timo",
+  "description": "Turn today's tasks into focused time blocks.",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0a0a0a",
+  "theme_color": "#0a0a0a",
+  "icons": [
+    {
+      "src": "./new%20logo.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
