@@ -1,12 +1,26 @@
 {
-  "rewrites": [
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "framework": null,
+  "builds": [
+    { "src": "api/index.mjs", "use": "@vercel/node" },
+    { "src": "index.html", "use": "@vercel/static" },
+    { "src": "app.js", "use": "@vercel/static" },
+    { "src": "styles.css", "use": "@vercel/static" },
+    { "src": "theme.css", "use": "@vercel/static" },
+    { "src": "variables.css", "use": "@vercel/static" },
+    { "src": "manifest.webmanifest", "use": "@vercel/static" },
+    { "src": "sw.js", "use": "@vercel/static" },
+    { "src": "*.svg", "use": "@vercel/static" },
+    { "src": "goorm sans 2/**", "use": "@vercel/static" }
+  ],
+  "routes": [
+    { "src": "/api/(.*)", "dest": "/api/index.mjs" },
     {
-      "source": "/api/:path*",
-      "destination": "/api/index.mjs"
+      "src": "/(server\\.mjs|package\\.json|vercel\\.json|DEPLOYMENT\\.md|\\.env.*|\\.data/.*|\\.git/.*|supabase/.*)",
+      "status": 404
     },
-    {
-      "source": "/:path*",
-      "destination": "/index.html"
-    }
+    { "handle": "filesystem" },
+    { "src": "/(.*)", "dest": "/index.html" }
   ]
 }
