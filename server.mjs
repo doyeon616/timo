@@ -58,6 +58,7 @@ const AUTH_RATE_LIMITS = {
   },
 };
 const RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000;
+const EMAIL_VERIFICATION_MESSAGE = "Check your email to verify your account before logging in.";
 const rateLimitBuckets = new Map();
 let lastRateLimitSweep = 0;
 
@@ -128,7 +129,7 @@ async function handleApi(request, response, url) {
 
     sendJson(response, 201, {
       requiresEmailVerification: true,
-      message: "Check your email to verify your account before logging in.",
+      message: EMAIL_VERIFICATION_MESSAGE,
     });
     return;
   }
@@ -323,9 +324,32 @@ async function signUpWithSupabaseAuth(request, { name, email, password }) {
     });
   } catch (error) {
     if (/already registered|already exists|duplicate key|users_email_partial_key/i.test(error.message)) {
-      const duplicateError = new Error("An account with this email already exists. Log in or check the verification email.");
-      duplicateError.status = 409;
-      throw duplicateError;
+      await resendSignupVerificationEmail(email, redirectTo);
+      return { requiresEmailVerification: true };
+    }
+    if (/sending confirmation email|send.*email|email.*send|smtp/i.test(error.message)) {
+      const emailError = new Error("Unable to send the verification email. Check the Supabase SMTP settings and try again.");
+      emailError.status = 502;
+      throw emailError;
+    }
+    throw error;
+  }
+}
+
+async function resendSignupVerificationEmail(email, redirectTo) {
+  try {
+    await supabaseAuthRequest(`/resend?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST",
+      body: {
+        type: "signup",
+        email,
+      },
+    });
+  } catch (error) {
+    if (/already confirmed|already verified/i.test(error.message)) {
+      const loginError = new Error("This email is already verified. Log in instead.");
+      loginError.status = 409;
+      throw loginError;
     }
     if (/sending confirmation email|send.*email|email.*send|smtp/i.test(error.message)) {
       const emailError = new Error("Unable to send the verification email. Check the Supabase SMTP settings and try again.");
