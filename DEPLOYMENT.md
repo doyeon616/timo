@@ -1,6 +1,6 @@
-# Supabase + Web Deployment
+# Supabase Auth + Web Deployment
 
-## 1. Create the Supabase database table
+## 1. Create the Supabase database tables
 
 1. Create a Supabase project.
 2. Open **SQL Editor**.
@@ -8,19 +8,33 @@
 
 This creates:
 
-- `timo_users`: account records and the full app-state snapshot.
+- `timo_users`: Supabase Auth user profiles and the full app-state snapshot.
 - `timo_tasks`: one row per task so tasks can be queried, filtered, audited, and tracked over time.
+
+The schema resets the existing `timo_users` and `timo_tasks` tables. This is intended for the current no-user launch state.
 
 ## 2. Get Supabase environment values
 
 In Supabase, open **Project Settings > API** and copy:
 
 - `Project URL` -> `SUPABASE_URL`
+- `anon public` key -> `SUPABASE_ANON_KEY`
 - `service_role` key -> `SUPABASE_SERVICE_ROLE_KEY`
 
 Keep the service role key server-side only. Do not put it in browser JavaScript.
 
-## 3. Run locally with Supabase
+## 3. Configure Supabase Auth email verification
+
+In Supabase, open **Authentication > URL Configuration**:
+
+- Set **Site URL** to the public app origin, for example `https://your-app.vercel.app`.
+- Add the same URL to **Redirect URLs**.
+
+In **Authentication > Providers > Email**, keep email confirmations enabled.
+
+For production sending, configure Supabase Auth SMTP. You can use Resend there, but the app no longer needs `RESEND_API_KEY` or `EMAIL_FROM` in Vercel. Without custom SMTP, Supabase's built-in sender is only for setup/testing and can refuse email delivery to regular users.
+
+## 4. Run locally with Supabase
 
 Create a `.env` file from `.env.example`, then run:
 
@@ -30,7 +44,7 @@ npm start
 
 Open `http://localhost:3000`.
 
-## 4. Deploy to Vercel
+## 5. Deploy to Vercel
 
 1. Push the latest code to GitHub.
 2. Open Vercel and choose **Add New > Project**.
@@ -38,12 +52,14 @@ Open `http://localhost:3000`.
 4. Keep the default framework preset as **Other**.
 5. Add Environment Variables:
    - `SUPABASE_URL`
+   - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
+   - `APP_ORIGIN`
 6. Deploy.
 
 Vercel serves the frontend as static files and routes `/api/*` to `api/index.mjs`.
 
-## 5. Other Node Hosts
+## 6. Other Node Hosts
 
 You can also use Render, Railway, Fly.io, or a VPS.
 
@@ -53,12 +69,14 @@ Set:
 - Start command: `npm start`
 - Environment variables:
   - `SUPABASE_URL`
+  - `SUPABASE_ANON_KEY`
   - `SUPABASE_SERVICE_ROLE_KEY`
+  - `APP_ORIGIN`
 
 The server already reads `process.env.PORT`, so the host can assign the public port automatically.
 
 ## Notes
 
-- Without Supabase env vars, the app falls back to `.data/db.json` for local development.
-- Current sessions are stored in server memory, so users may need to log in again after a redeploy or server restart.
-- For a larger production app, replace the custom auth with Supabase Auth and add email verification/password reset flows.
+- API signup and login require Supabase Auth environment variables.
+- Sessions are Supabase Auth access and refresh tokens, so redeploys no longer invalidate everyone by clearing server memory.
+- Add password reset flows before public launch if users need self-service account recovery.

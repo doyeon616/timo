@@ -11,6 +11,7 @@ const TIMELINE_END_MINUTE = 12 * 60;
 const TIMEBOX_STATUSES = new Set(["active", "review", "done", "paused"]);
 const DEFAULT_TAGS = ["Personal", "Work", "Health", "Study", "Idea"];
 const LEGACY_TAG_RENAMES = new Map([["admin", "Health"]]);
+const PASSWORD_RULE_TEXT = "Use 8+ characters with uppercase, lowercase, number, and special character.";
 const TAG_COLORS = new Map([
   ["personal", "#ff7ab6"],
   ["work", "#19d0e8"],
@@ -44,6 +45,8 @@ const elements = {
   loginName: document.querySelector("#loginName"),
   loginEmail: document.querySelector("#loginEmail"),
   loginPassword: document.querySelector("#loginPassword"),
+  passwordRuleList: document.querySelector("#passwordRules"),
+  passwordRules: document.querySelectorAll("[data-password-rule]"),
   authStatus: document.querySelector("#authStatus"),
   appShell: document.querySelector("#appShell"),
   accountButton: document.querySelector("#accountButton"),
@@ -127,6 +130,13 @@ elements.authSwitchButton.addEventListener("click", () => {
   setAuthMode(elements.authSwitchButton.dataset.authMode);
 });
 
+["input", "keyup", "change"].forEach((eventName) => {
+  elements.loginPassword.addEventListener(eventName, () => {
+    updatePasswordRuleList(elements.loginPassword.value);
+    elements.loginPassword.setCustomValidity("");
+  });
+});
+
 elements.loginScreen.addEventListener("click", (event) => {
   if (event.target === elements.loginScreen) {
     elements.loginScreen.classList.add("is-hidden");
@@ -137,9 +147,20 @@ async function loginTimo() {
   const name = elements.loginName.value.trim();
   const email = elements.loginEmail.value.trim();
   const password = elements.loginPassword.value;
-  if ((authMode === "signup" && !name) || !email || password.length < 8) {
+  elements.loginPassword.setCustomValidity("");
+  updatePasswordRuleList(password);
+  if ((authMode === "signup" && !name) || !email || !password) {
     elements.loginForm.reportValidity();
     return;
+  }
+  if (authMode === "signup") {
+    const passwordError = getPasswordRuleError(password);
+    if (passwordError) {
+      elements.loginPassword.setCustomValidity(passwordError);
+      elements.loginForm.reportValidity();
+      elements.authStatus.textContent = passwordError;
+      return;
+    }
   }
 
   elements.loginButton.disabled = true;
@@ -167,16 +188,14 @@ async function loginTimo() {
 
   sessionUser = {
     name: authResult.name || name || email.split("@")[0],
-    email,
+    email: authResult.email || email,
     emailVerified: authResult.verified,
     token: authResult.token,
+    refreshToken: authResult.refreshToken,
+    expiresAt: authResult.expiresAt,
     loggedInAt: new Date().toISOString(),
   };
-  try {
-    localStorage.setItem(AUTH_KEY, JSON.stringify(sessionUser));
-  } catch {
-    // File previews or privacy settings can block storage; keep the session in memory.
-  }
+  storeSessionUser(sessionUser);
   elements.loginPassword.value = "";
   elements.authStatus.textContent = "";
   elements.loginButton.disabled = false;
@@ -196,9 +215,52 @@ function setAuthMode(mode) {
   elements.loginNameField.classList.toggle("is-hidden", isLogin);
   elements.loginName.required = !isLogin;
   elements.loginPassword.autocomplete = isLogin ? "current-password" : "new-password";
+  elements.loginPassword.placeholder = isLogin ? "Password" : PASSWORD_RULE_TEXT;
+  elements.loginPassword.minLength = isLogin ? 1 : 8;
+  elements.loginPassword.setCustomValidity("");
+  elements.passwordRuleList.classList.toggle("is-hidden", isLogin);
+  updatePasswordRuleList(elements.loginPassword.value);
   elements.loginButton.textContent = isLogin ? "Log in" : "Create account";
   elements.authStatus.textContent = "";
 }
+
+function getPasswordRuleError(password) {
+  const rules = getPasswordRuleStates(password);
+  if (!rules.maxLength) return "Use a password with 64 characters or fewer.";
+  if (!rules.length) return PASSWORD_RULE_TEXT;
+  if (!rules.lowercase || !rules.uppercase || !rules.number || !rules.special) return PASSWORD_RULE_TEXT;
+  return "";
+}
+
+function getPasswordRuleStates(password) {
+  return {
+    length: password.length >= 8 && password.length <= 64,
+    lowercase: hasLowercaseLetter(password),
+    uppercase: hasUppercaseLetter(password),
+    number: /\d/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+    maxLength: password.length <= 64,
+  };
+}
+
+function hasLowercaseLetter(value) {
+  return /[a-z]/.test(value);
+}
+
+function hasUppercaseLetter(value) {
+  return /[A-Z]/.test(value);
+}
+
+function updatePasswordRuleList(password) {
+  const rules = getPasswordRuleStates(password);
+  elements.passwordRules.forEach((rule) => {
+    rule.classList.toggle("is-met", Boolean(rules[rule.dataset.passwordRule]));
+  });
+}
+
+window.updatePasswordChecklist = () => {
+  updatePasswordRuleList(elements.loginPassword.value);
+};
 
 async function requestSignupEmailVerification(signup) {
   if (API_BASE) {
@@ -236,15 +298,27 @@ async function requestExistingAccountLogin(credentials) {
 }
 
 function normalizeAuthResponse(data) {
+  const verificationMessage =
+    data.requiresEmailVerification && data.verificationUrl
+      ? `${data.message} Development verification link: ${data.verificationUrl}`
+      : data.message;
+
   return {
     verified: Boolean(data.user?.emailVerified),
     name: data.user?.name,
     email: data.user?.email,
     token: data.token,
+    refreshToken: data.refreshToken,
+    expiresAt: data.expiresAt,
+    message: verificationMessage,
   };
 }
 
 async function apiRequest(path, options = {}) {
+  return apiRequestWithRetry(path, options, true);
+}
+
+async function apiRequestWithRetry(path, options = {}, allowRefresh = true) {
   const headers = {
     Accept: "application/json",
     ...(options.body ? { "Content-Type": "application/json" } : {}),
@@ -262,11 +336,55 @@ async function apiRequest(path, options = {}) {
   });
   const data = await response.json().catch(() => ({}));
 
+  if (response.status === 401 && options.auth !== false && allowRefresh && (await refreshCurrentSession())) {
+    return apiRequestWithRetry(path, options, false);
+  }
+
   if (!response.ok) {
     throw new Error(data.error || "Server request failed.");
   }
 
   return data;
+}
+
+async function refreshCurrentSession() {
+  const current = getCurrentUser();
+  if (!API_BASE || !current?.refreshToken) {
+    clearSessionUser();
+    return false;
+  }
+
+  const response = await fetch(`${API_BASE}/auth/refresh`, {
+    method: "POST",
+    headers: {
+      Accept: "application/json",
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ refreshToken: current.refreshToken }),
+  });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    clearSessionUser();
+    return false;
+  }
+
+  const refreshed = normalizeAuthResponse(data);
+  if (!refreshed.verified || !refreshed.token) {
+    clearSessionUser();
+    return false;
+  }
+
+  sessionUser = {
+    ...current,
+    name: refreshed.name || current.name,
+    email: refreshed.email || current.email,
+    emailVerified: refreshed.verified,
+    token: refreshed.token,
+    refreshToken: refreshed.refreshToken || current.refreshToken,
+    expiresAt: refreshed.expiresAt,
+  };
+  storeSessionUser(sessionUser);
+  return true;
 }
 
 elements.accountButton.addEventListener("click", (event) => {
@@ -290,19 +408,17 @@ document.addEventListener("click", (event) => {
   openAccountModal();
 }, true);
 
-elements.logoutButton.addEventListener("click", () => {
-  sessionUser = null;
-  try {
-    localStorage.removeItem(AUTH_KEY);
-  } catch {}
+elements.logoutButton.addEventListener("click", async () => {
+  await logoutServerSession();
+  clearSessionUser();
   stopTicker();
   closeAccountModal();
   showApp();
 });
 
-elements.deleteAccountButton.addEventListener("click", () => {
+elements.deleteAccountButton.addEventListener("click", async () => {
   if (!confirm("Delete this account and clear local tasks?")) return;
-  deleteLocalAccount();
+  await deleteLocalAccount();
 });
 
 elements.taskEditForm.addEventListener("submit", (event) => {
@@ -634,19 +750,87 @@ function getPersistableDayState(dayState) {
 }
 
 async function initAuthView() {
+  await consumeAuthRedirectHash();
   getCurrentUser();
   await hydrateStateFromServer();
   showApp();
 }
 
+async function consumeAuthRedirectHash() {
+  const hash = window.location.hash.startsWith("#") ? window.location.hash.slice(1) : "";
+  if (!hash) return;
+
+  const params = new URLSearchParams(hash);
+  const token = params.get("access_token");
+  const refreshToken = params.get("refresh_token") || "";
+  if (!token) return;
+
+  const expiresAt = getAuthHashExpiresAt(params);
+  window.history.replaceState(null, document.title, `${window.location.pathname}${window.location.search}`);
+  sessionUser = {
+    token,
+    refreshToken,
+    expiresAt,
+    loggedInAt: new Date().toISOString(),
+  };
+
+  try {
+    const data = await apiRequest("/me");
+    sessionUser = {
+      ...data.user,
+      token,
+      refreshToken,
+      expiresAt,
+      loggedInAt: new Date().toISOString(),
+    };
+    storeSessionUser(sessionUser);
+  } catch {
+    clearSessionUser();
+  }
+}
+
+function getAuthHashExpiresAt(params) {
+  const expiresAt = Number(params.get("expires_at"));
+  if (Number.isFinite(expiresAt) && expiresAt > 0) return new Date(expiresAt * 1000).toISOString();
+  const expiresIn = Number(params.get("expires_in"));
+  if (Number.isFinite(expiresIn) && expiresIn > 0) return new Date(Date.now() + expiresIn * 1000).toISOString();
+  return null;
+}
+
 function getCurrentUser() {
-  if (sessionUser) return sessionUser;
+  if (sessionUser && !isSessionExpired(sessionUser)) return sessionUser;
+  if (sessionUser?.refreshToken) return sessionUser;
+  if (sessionUser) sessionUser = null;
   try {
     sessionUser = JSON.parse(localStorage.getItem(AUTH_KEY));
+    if (isSessionExpired(sessionUser) && !sessionUser?.refreshToken) {
+      sessionUser = null;
+      localStorage.removeItem(AUTH_KEY);
+    }
     return sessionUser;
   } catch {
     return null;
   }
+}
+
+function storeSessionUser(user) {
+  try {
+    localStorage.setItem(AUTH_KEY, JSON.stringify(user));
+  } catch {
+    // File previews or privacy settings can block storage; keep the session in memory.
+  }
+}
+
+function clearSessionUser() {
+  sessionUser = null;
+  try {
+    localStorage.removeItem(AUTH_KEY);
+  } catch {}
+}
+
+function isSessionExpired(user) {
+  if (!user?.expiresAt) return false;
+  return new Date(user.expiresAt).getTime() <= Date.now();
 }
 
 function showApp() {
@@ -696,12 +880,11 @@ function getUserInitial(user) {
   return name ? [...name][0].toUpperCase() : "";
 }
 
-function deleteLocalAccount() {
-  deleteServerAccount();
-  sessionUser = null;
+async function deleteLocalAccount() {
+  await deleteServerAccount();
+  clearSessionUser();
   stopTicker();
   try {
-    localStorage.removeItem(AUTH_KEY);
     localStorage.removeItem(STORAGE_KEY);
   } catch {}
 
@@ -822,9 +1005,14 @@ function queueServerStateSync(snapshot, delay = 500) {
   }, delay);
 }
 
-function deleteServerAccount() {
+async function deleteServerAccount() {
   if (!API_BASE || !getCurrentUser()?.token) return;
-  apiRequest("/account", { method: "DELETE" }).catch(() => {});
+  await apiRequest("/account", { method: "DELETE" }).catch(() => {});
+}
+
+async function logoutServerSession() {
+  if (!API_BASE || !getCurrentUser()?.token) return;
+  await apiRequest("/auth/logout", { method: "POST" }).catch(() => {});
 }
 
 function switchDate(offsetDays) {
