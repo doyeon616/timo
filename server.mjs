@@ -171,6 +171,13 @@ async function handleApi(request, response, url) {
     return;
   }
 
+  if (request.method === "POST" && url.pathname === "/api/activity") {
+    const body = await readJsonBody(request);
+    await recordUserActivity(user, body.activityDate);
+    sendJson(response, 200, { ok: true });
+    return;
+  }
+
   if (request.method === "GET" && url.pathname === "/api/me") {
     sendJson(response, 200, { user: publicUser(user) });
     return;
@@ -183,6 +190,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "GET" && url.pathname === "/api/state") {
+    await recordUserActivityBestEffort(user, getHeaderValue(request, "x-timo-activity-date"));
     sendJson(response, 200, { state: user.state || null });
     return;
   }
@@ -190,6 +198,7 @@ async function handleApi(request, response, url) {
   if (request.method === "PUT" && url.pathname === "/api/state") {
     const body = await readJsonBody(request);
     await updateUserState(user, body.state || null);
+    await recordUserActivityBestEffort(user, body.activityDate);
     sendJson(response, 200, { ok: true });
     return;
   }
@@ -660,6 +669,75 @@ async function markMissingTasksDeleted(userId, activeTaskIds, deletedAt) {
     },
     headers: { Prefer: "return=minimal" },
   });
+}
+
+async function recordUserActivityBestEffort(user, activityDate) {
+  try {
+    await recordUserActivity(user, activityDate);
+  } catch (error) {
+    console.warn("Unable to record user activity day:", error.message);
+  }
+}
+
+async function recordUserActivity(user, activityDate) {
+  ensureSupabaseAuthAvailable();
+  const date = normalizeActivityDate(activityDate);
+  const now = new Date().toISOString();
+  const existingRows = await supabaseRequest(
+    `/timo_user_activity_days?user_id=eq.${encodeURIComponent(user.id)}&activity_date=eq.${encodeURIComponent(date)}&select=event_count`,
+  );
+
+  if (existingRows[0]) {
+    await supabaseRequest(
+      `/timo_user_activity_days?user_id=eq.${encodeURIComponent(user.id)}&activity_date=eq.${encodeURIComponent(date)}`,
+      {
+        method: "PATCH",
+        body: {
+          last_seen_at: now,
+          event_count: Math.max(0, Number(existingRows[0].event_count || 0)) + 1,
+          updated_at: now,
+        },
+        headers: { Prefer: "return=minimal" },
+      },
+    );
+    return;
+  }
+
+  try {
+    await supabaseRequest("/timo_user_activity_days", {
+      method: "POST",
+      body: {
+        user_id: user.id,
+        activity_date: date,
+        first_seen_at: now,
+        last_seen_at: now,
+        event_count: 1,
+        created_at: now,
+        updated_at: now,
+      },
+      headers: { Prefer: "return=minimal" },
+    });
+  } catch (error) {
+    if (!/duplicate key|23505/i.test(error.message)) throw error;
+    await recordUserActivity(user, date);
+  }
+}
+
+function normalizeActivityDate(value) {
+  const fallback = getServerDateKey();
+  const raw = String(value || "").trim();
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return fallback;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== raw) return fallback;
+
+  const activityTime = parsed.getTime();
+  const todayTime = new Date(`${fallback}T00:00:00.000Z`).getTime();
+  const dayDiff = Math.round((activityTime - todayTime) / (24 * 60 * 60 * 1000));
+  return Math.abs(dayDiff) <= 1 ? raw : fallback;
+}
+
+function getServerDateKey(date = new Date()) {
+  return date.toISOString().slice(0, 10);
 }
 
 function getTaskRowsFromState(userId, state) {

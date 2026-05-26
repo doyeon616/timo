@@ -10,8 +10,11 @@ This creates:
 
 - `timo_users`: Supabase Auth user profiles and the full app-state snapshot.
 - `timo_tasks`: one row per task so tasks can be queried, filtered, audited, and tracked over time.
+- `timo_user_activity_days`: one row per user per active day for daily active user and retention reporting.
 
-The schema resets the existing `timo_users` and `timo_tasks` tables. This is intended for the current no-user launch state.
+The schema resets the existing `timo_users`, `timo_tasks`, and `timo_user_activity_days` tables. This is intended for the current no-user launch state.
+
+If the production database already has users, do not rerun `supabase/schema.sql`. Run `supabase/add_user_activity_days.sql` instead to add the activity table without dropping data.
 
 ## 2. Get Supabase environment values
 

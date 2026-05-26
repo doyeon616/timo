@@ -34,8 +34,16 @@ let authMode = "signup";
 let completionPanelWasOpen = false;
 let isTimerFullView = false;
 let serverSyncTimer = null;
+let deferredInstallPrompt = null;
+let activitySyncTimer = null;
+let lastTrackedActivityDate = null;
 
 const elements = {
+  onboardingModal: document.querySelector("#onboardingModal"),
+  onboardingStartButton: document.querySelector("#onboardingStartButton"),
+  onboardingCloseButton: document.querySelector("#onboardingCloseButton"),
+  installAppButton: document.querySelector("#installAppButton"),
+  installStatus: document.querySelector("#installStatus"),
   loginScreen: document.querySelector("#loginScreen"),
   loginForm: document.querySelector("#loginForm"),
   loginButton: document.querySelector("#loginButton"),
@@ -115,7 +123,38 @@ const elements = {
 
 elements.capacityInput.value = state.capacityHours;
 
+window.addEventListener("beforeinstallprompt", (event) => {
+  event.preventDefault();
+  deferredInstallPrompt = event;
+  updateInstallButtonState();
+});
+
+window.addEventListener("appinstalled", () => {
+  deferredInstallPrompt = null;
+  setInstallStatus("Timo has been installed.");
+  updateInstallButtonState();
+});
+
 initAuthView();
+
+elements.onboardingStartButton.addEventListener("click", () => {
+  setAuthMode("signup");
+  showLogin();
+});
+
+elements.onboardingCloseButton.addEventListener("click", () => {
+  hideOnboarding();
+});
+
+elements.onboardingModal.addEventListener("click", (event) => {
+  if (event.target === elements.onboardingModal) {
+    hideOnboarding();
+  }
+});
+
+elements.installAppButton.addEventListener("click", () => {
+  installPwaApp();
+});
 
 elements.loginForm.addEventListener("submit", (event) => {
   event.preventDefault();
@@ -140,6 +179,7 @@ elements.authSwitchButton.addEventListener("click", () => {
 elements.loginScreen.addEventListener("click", (event) => {
   if (event.target === elements.loginScreen) {
     elements.loginScreen.classList.add("is-hidden");
+    if (!getCurrentUser()) showOnboarding();
   }
 });
 
@@ -208,6 +248,8 @@ window.loginTimo = loginTimo;
 function setAuthMode(mode) {
   authMode = mode === "login" ? "login" : "signup";
   const isLogin = authMode === "login";
+  elements.loginForm.classList.toggle("is-login-mode", isLogin);
+  elements.loginForm.classList.toggle("is-signup-mode", !isLogin);
   elements.authSwitchButton.dataset.authMode = isLogin ? "signup" : "login";
   elements.authSwitchButton.textContent = isLogin ? "Create account" : "Log in";
   elements.authSwitchButton.setAttribute("aria-label", isLogin ? "Switch to create account" : "Switch to log in");
@@ -322,6 +364,7 @@ async function apiRequestWithRetry(path, options = {}, allowRefresh = true) {
   const headers = {
     Accept: "application/json",
     ...(options.body ? { "Content-Type": "application/json" } : {}),
+    ...(options.activityDate ? { "X-Timo-Activity-Date": options.activityDate } : {}),
   };
 
   if (options.auth !== false) {
@@ -620,6 +663,19 @@ document.addEventListener("keydown", (event) => {
 
 function loadState() {
   const today = getLocalDateKey();
+  const storedUser = getStoredSessionUser();
+
+  if (!storedUser) {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+
+    const demoState = createDemoDayState(today);
+    return {
+      ...demoState,
+      __days: {},
+    };
+  }
 
   try {
     const saved = JSON.parse(localStorage.getItem(STORAGE_KEY));
@@ -700,8 +756,6 @@ function createDemoDayState(date) {
         actualSeconds: 28 * 60,
         status: "paused",
         extensions: 0,
-        timeboxOrder: 1,
-        timeboxStartMinute: 10 * 60,
       },
       {
         id: "demo-admin",
@@ -714,8 +768,6 @@ function createDemoDayState(date) {
         actualSeconds: 8 * 60,
         status: "review",
         extensions: 0,
-        timeboxOrder: 2,
-        timeboxStartMinute: 10 * 60 + 45,
       },
     ],
   };
@@ -797,6 +849,16 @@ function getAuthHashExpiresAt(params) {
   return null;
 }
 
+function getStoredSessionUser() {
+  try {
+    const user = JSON.parse(localStorage.getItem(AUTH_KEY));
+    if (!user || (isSessionExpired(user) && !user.refreshToken)) return null;
+    return user;
+  } catch {
+    return null;
+  }
+}
+
 function getCurrentUser() {
   if (sessionUser && !isSessionExpired(sessionUser)) return sessionUser;
   if (sessionUser?.refreshToken) return sessionUser;
@@ -823,6 +885,8 @@ function storeSessionUser(user) {
 
 function clearSessionUser() {
   sessionUser = null;
+  lastTrackedActivityDate = null;
+  window.clearTimeout(activitySyncTimer);
   try {
     localStorage.removeItem(AUTH_KEY);
   } catch {}
@@ -838,12 +902,68 @@ function showApp() {
   elements.appShell.classList.remove("is-hidden");
   renderAccountButton();
   closeAccountModal();
+  if (getCurrentUser()) {
+    hideOnboarding();
+    trackDailyActivity();
+  } else {
+    showOnboarding();
+  }
 }
 
 function showLogin() {
+  hideOnboarding();
   elements.loginScreen.classList.remove("is-hidden");
   document.title = BASE_TITLE;
-  elements.loginName.focus();
+  requestAnimationFrame(() => elements.loginName.focus());
+}
+
+function showOnboarding() {
+  if (getCurrentUser()) return;
+  elements.onboardingModal.classList.remove("is-hidden");
+  setInstallStatus("");
+  updateInstallButtonState();
+}
+
+function hideOnboarding() {
+  elements.onboardingModal.classList.add("is-hidden");
+}
+
+async function installPwaApp() {
+  if (isStandaloneApp()) {
+    setInstallStatus("Timo is already running as an installed app.");
+    updateInstallButtonState();
+    return;
+  }
+
+  if (!deferredInstallPrompt) {
+    setInstallStatus("If the install prompt does not appear, use your browser menu to install the app.");
+    return;
+  }
+
+  const promptEvent = deferredInstallPrompt;
+  deferredInstallPrompt = null;
+  elements.installAppButton.disabled = true;
+  try {
+    promptEvent.prompt();
+    const choice = await promptEvent.userChoice;
+    setInstallStatus(choice?.outcome === "accepted" ? "Installation started." : "Installation was canceled.");
+  } catch {
+    setInstallStatus("Installation cannot start right now. Please try again later.");
+  } finally {
+    updateInstallButtonState();
+  }
+}
+
+function updateInstallButtonState() {
+  elements.installAppButton.disabled = isStandaloneApp();
+}
+
+function setInstallStatus(message) {
+  elements.installStatus.textContent = message;
+}
+
+function isStandaloneApp() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
 function openAccountModal() {
@@ -931,7 +1051,19 @@ function persistState() {
     selectedDate: state.date,
     days,
   };
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+
+  if (!getCurrentUser()) {
+    try {
+      localStorage.removeItem(STORAGE_KEY);
+    } catch {}
+    return;
+  }
+
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(snapshot));
+  } catch {
+    // Keep the in-memory state usable when browser storage is unavailable.
+  }
   queueServerStateSync(snapshot);
 }
 
@@ -939,7 +1071,7 @@ async function hydrateStateFromServer() {
   if (!API_BASE || !getCurrentUser()?.token) return;
 
   try {
-    const data = await apiRequest("/state");
+    const data = await apiRequest("/state", { activityDate: getLocalDateKey() });
     if (data.state?.version === 2 && data.state.days) {
       applyPersistedState(data.state);
       return;
@@ -1000,8 +1132,24 @@ function queueServerStateSync(snapshot, delay = 500) {
   serverSyncTimer = window.setTimeout(() => {
     apiRequest("/state", {
       method: "PUT",
-      body: { state: snapshot },
+      body: { state: snapshot, activityDate: getLocalDateKey() },
     }).catch(() => {});
+  }, delay);
+}
+
+function trackDailyActivity(delay = 0) {
+  if (!API_BASE || !getCurrentUser()?.token) return;
+  const activityDate = getLocalDateKey();
+  if (lastTrackedActivityDate === activityDate) return;
+  lastTrackedActivityDate = activityDate;
+  window.clearTimeout(activitySyncTimer);
+  activitySyncTimer = window.setTimeout(() => {
+    apiRequest("/activity", {
+      method: "POST",
+      body: { activityDate },
+    }).catch(() => {
+      lastTrackedActivityDate = null;
+    });
   }, delay);
 }
 
@@ -1132,7 +1280,11 @@ function updateActiveTimer() {
     finishActiveBox(true);
     return;
   }
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedStateSnapshot()));
+  if (getCurrentUser()) {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(getPersistedStateSnapshot()));
+    } catch {}
+  }
   renderTimeboxes();
   renderTimer();
 }
@@ -1654,6 +1806,8 @@ function renderHourMarkers(trackHeight, startMinute, hourCount) {
 }
 
 function renderCurrentTimeLine(timelineStart, trackHeight) {
+  if (!isViewingToday()) return;
+
   const currentMinute = getMinutesFromDate(Date.now());
   const offsetMinutes = currentMinute - timelineStart;
   if (offsetMinutes < 0) return;
@@ -1684,7 +1838,7 @@ function getTimeboxedTasks() {
 }
 
 function isTimeboxedTask(task) {
-  return Number.isFinite(task.timeboxStartAt);
+  return Number.isFinite(task.timeboxStartAt) || Number.isFinite(task.timeboxStartMinute);
 }
 
 function ensureTaskOrder() {
@@ -2002,10 +2156,17 @@ function normalizeTag(tag) {
 }
 
 function normalizeTaskTags(task) {
-  return {
+  const normalizedTask = {
     ...task,
     tag: normalizeTag(task.tag),
   };
+  return normalizeDemoTimebox(normalizedTask);
+}
+
+function normalizeDemoTimebox(task) {
+  if (!String(task.id || "").startsWith("demo-") || task.status === "done") return task;
+  const { timeboxStartAt, timeboxStartMinute, timeboxDurationMinutes, timeboxOrder, ...rest } = task;
+  return rest;
 }
 
 function getAvailableTags() {

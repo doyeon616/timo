@@ -6,14 +6,14 @@
     <meta name="theme-color" content="#0a0a0a" />
     <title>Timo - Timeboxed Tasks</title>
     <link rel="manifest" href="./manifest.webmanifest" />
-    <link rel="icon" href="./new%20logo.svg" type="image/svg+xml" />
-    <link rel="apple-touch-icon" href="./new%20logo.svg" />
-    <link rel="stylesheet" href="./variables.css?v=174" />
-    <link rel="stylesheet" href="./theme.css?v=174" />
-    <link rel="stylesheet" href="./styles.css?v=174" />
+    <link rel="icon" href="./icon%202.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./icon%202.svg" />
+    <link rel="stylesheet" href="./variables.css?v=218" />
+    <link rel="stylesheet" href="./theme.css?v=218" />
+    <link rel="stylesheet" href="./styles.css?v=218" />
   </head>
   <body>
-    <section class="login-screen" id="loginScreen" aria-label="Login">
+    <section class="login-screen is-hidden" id="loginScreen" aria-label="Login">
       <form class="login-panel" id="loginForm">
         <div class="login-panel-header">
           <div>
@@ -31,11 +31,52 @@
         </label>
         <label>
           <span>Password</span>
-          <input id="loginPassword" type="password" autocomplete="new-password" placeholder="At least 8 characters" minlength="8" required />
+          <input
+            id="loginPassword"
+            type="password"
+            autocomplete="new-password"
+            placeholder="Create a secure password"
+            minlength="8"
+            maxlength="64"
+            oninput="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
+            onkeyup="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
+            onchange="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
+            required
+          />
+          <ul class="password-rules" id="passwordRules" aria-label="Password requirements">
+            <li data-password-rule="length">8-64 characters</li>
+            <li data-password-rule="lowercase">Lowercase letter</li>
+            <li data-password-rule="uppercase">Uppercase letter</li>
+            <li data-password-rule="number">Number</li>
+            <li data-password-rule="special">Special character</li>
+          </ul>
         </label>
         <p class="auth-status" id="authStatus" aria-live="polite"></p>
         <button class="primary-button" id="loginButton" type="button" onclick="window.loginTimo?.()">Create account</button>
       </form>
+    </section>
+
+    <section class="onboarding-modal is-hidden" id="onboardingModal" role="dialog" aria-modal="true" aria-labelledby="onboardingTitle">
+      <div class="onboarding-card">
+        <div class="onboarding-header">
+          <img class="onboarding-logo" src="./logo.svg" alt="Timo" />
+          <button class="onboarding-close-button" id="onboardingCloseButton" type="button" aria-label="Close onboarding">
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-x-icon lucide-x" aria-hidden="true">
+              <path d="M18 6 6 18" />
+              <path d="m6 6 12 12" />
+            </svg>
+          </button>
+        </div>
+        <div class="onboarding-copy">
+          <h1 id="onboardingTitle">Plan your day with timeboxing.</h1>
+          <p class="onboarding-description">Timo is a to-do app that helps users manage tasks through timeboxing</p>
+        </div>
+        <div class="onboarding-actions">
+          <button class="onboarding-button onboarding-download-button" id="installAppButton" type="button">Download App</button>
+          <button class="onboarding-button onboarding-start-button" id="onboardingStartButton" type="button">Get Started</button>
+        </div>
+        <p class="onboarding-status" id="installStatus" aria-live="polite"></p>
+      </div>
     </section>
 
     <div class="app-shell is-hidden" id="appShell">
@@ -303,6 +344,23 @@
       </article>
     </template>
 
-    <script src="./app.js?v=174" defer></script>
+    <script>
+      window.updatePasswordChecklist = function () {
+        const input = document.querySelector("#loginPassword");
+        const rules = document.querySelectorAll("[data-password-rule]");
+        const value = input ? input.value : "";
+        const states = {
+          length: value.length >= 8 && value.length <= 64,
+          lowercase: /[a-z]/.test(value),
+          uppercase: /[A-Z]/.test(value),
+          number: /\d/.test(value),
+          special: /[^A-Za-z0-9]/.test(value),
+        };
+        rules.forEach((rule) => {
+          rule.classList.toggle("is-met", Boolean(states[rule.dataset.passwordRule]));
+        });
+      };
+    </script>
+    <script src="./app.js?v=218" defer></script>
   </body>
 </html>

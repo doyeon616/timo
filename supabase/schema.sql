@@ -1,4 +1,5 @@
 drop table if exists public.timo_tasks;
+drop table if exists public.timo_user_activity_days;
 drop table if exists public.timo_users;
 
 create table public.timo_users (
@@ -15,6 +16,28 @@ alter table public.timo_users enable row level security;
 
 create policy "Service role can manage timo users"
 on public.timo_users
+for all
+using (auth.role() = 'service_role')
+with check (auth.role() = 'service_role');
+
+create table public.timo_user_activity_days (
+  user_id uuid not null references public.timo_users(id) on delete cascade,
+  activity_date date not null,
+  first_seen_at timestamptz not null default now(),
+  last_seen_at timestamptz not null default now(),
+  event_count integer not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  primary key (user_id, activity_date)
+);
+
+create index timo_user_activity_days_date_idx
+on public.timo_user_activity_days (activity_date);
+
+alter table public.timo_user_activity_days enable row level security;
+
+create policy "Service role can manage timo user activity days"
+on public.timo_user_activity_days
 for all
 using (auth.role() = 'service_role')
 with check (auth.role() = 'service_role');
