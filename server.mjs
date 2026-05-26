@@ -312,14 +312,23 @@ function getRequestOrigin(request) {
 async function signUpWithSupabaseAuth(request, { name, email, password }) {
   ensureSupabaseAuthAvailable();
   const redirectTo = APP_ORIGIN || getRequestOrigin(request);
-  return supabaseAuthRequest(`/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
-    method: "POST",
-    body: {
-      email,
-      password,
-      data: { name },
-    },
-  });
+  try {
+    return await supabaseAuthRequest(`/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
+      method: "POST",
+      body: {
+        email,
+        password,
+        data: { name },
+      },
+    });
+  } catch (error) {
+    if (/already registered|already exists|duplicate key|users_email_partial_key/i.test(error.message)) {
+      const duplicateError = new Error("An account with this email already exists. Log in or check the verification email.");
+      duplicateError.status = 409;
+      throw duplicateError;
+    }
+    throw error;
+  }
 }
 
 async function loginWithSupabaseAuth(email, password) {
