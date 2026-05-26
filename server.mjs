@@ -327,6 +327,11 @@ async function signUpWithSupabaseAuth(request, { name, email, password }) {
       duplicateError.status = 409;
       throw duplicateError;
     }
+    if (/sending confirmation email|send.*email|email.*send|smtp/i.test(error.message)) {
+      const emailError = new Error("Unable to send the verification email. Check the Supabase SMTP settings and try again.");
+      emailError.status = 502;
+      throw emailError;
+    }
     throw error;
   }
 }
