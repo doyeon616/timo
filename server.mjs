@@ -60,7 +60,40 @@ const AUTH_RATE_LIMITS = {
 const RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000;
 const EMAIL_VERIFICATION_MESSAGE = "Check your email to verify your account before logging in.";
 const AUTH_INVALID_PASSWORD_MESSAGE = "The password is incorrect.";
+const AUTH_UNAVAILABLE_MESSAGE = "Authentication is temporarily unavailable. Please try again later.";
 const AUTH_EMAIL_WAIT_FALLBACK_SECONDS = 60;
+const DEFAULT_JSON_BODY_LIMIT_BYTES = 64 * 1024;
+const STATE_JSON_BODY_LIMIT_BYTES = 512 * 1024;
+const MAX_STATE_DAYS = 400;
+const MAX_TASKS_PER_DAY = 200;
+const MAX_TOTAL_STATE_TASKS = 1000;
+const MAX_TASK_ID_LENGTH = 120;
+const MAX_TASK_NAME_LENGTH = 160;
+const MAX_TASK_NOTE_LENGTH = 2000;
+const MAX_TASK_TAG_LENGTH = 32;
+const MAX_TASK_STATUS_LENGTH = 24;
+const MAX_TASK_PRIORITY_LENGTH = 24;
+const CONTENT_SECURITY_POLICY = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data:",
+  "font-src 'self'",
+  "connect-src 'self'",
+  "manifest-src 'self'",
+  "worker-src 'self'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+].join("; ");
+const SECURITY_HEADERS = {
+  "Content-Security-Policy": CONTENT_SECURITY_POLICY,
+  "X-Content-Type-Options": "nosniff",
+  "X-Frame-Options": "DENY",
+  "Referrer-Policy": "no-referrer",
+  "Permissions-Policy": "camera=(), microphone=(), geolocation=(), payment=()",
+};
 const USER_ROLES = new Set([
   "Student",
   "Designer",
@@ -92,7 +125,7 @@ export default async function handler(request, response) {
       return;
     }
     if (error.code === "CONFIGURATION_ERROR") {
-      sendJson(response, 500, { error: error.message });
+      sendJson(response, 500, { error: AUTH_UNAVAILABLE_MESSAGE });
       return;
     }
     sendJson(response, 500, { error: "Internal server error" });
@@ -217,7 +250,7 @@ async function handleApi(request, response, url) {
   }
 
   if (request.method === "PUT" && url.pathname === "/api/state") {
-    const body = await readJsonBody(request);
+    const body = await readJsonBody(request, STATE_JSON_BODY_LIMIT_BYTES);
     await updateUserState(user, body.state || null);
     await recordUserActivityBestEffort(user, body.activityDate);
     sendJson(response, 200, { ok: true });
@@ -262,9 +295,9 @@ async function serveFile(response, filePath) {
   const fileStat = await stat(filePath);
   if (!fileStat.isFile()) throw new Error("Not a file");
   response.writeHead(200, {
+    ...SECURITY_HEADERS,
     "Cache-Control": "no-cache",
     "Content-Type": MIME_TYPES[extname(filePath)] || "application/octet-stream",
-    "X-Content-Type-Options": "nosniff",
   });
   createReadStream(filePath).pipe(response);
 }
@@ -685,16 +718,17 @@ async function upsertUserProfile(user) {
 
 async function updateUserState(user, state) {
   ensureSupabaseAuthAvailable();
+  const sanitizedState = sanitizeStateSnapshot(state);
   await supabaseRequest(`/timo_users?id=eq.${encodeURIComponent(user.id)}`, {
     method: "PATCH",
     body: {
-      app_state: state,
+      app_state: sanitizedState,
       email_verified: Boolean(user.emailVerified),
       updated_at: new Date().toISOString(),
     },
     headers: { Prefer: "return=minimal" },
   });
-  await syncTasksForUser(user, state);
+  await syncTasksForUser(user, sanitizedState);
 }
 
 async function updateUserRole(user, role) {
@@ -833,6 +867,106 @@ function getServerDateKey(date = new Date()) {
   return date.toISOString().slice(0, 10);
 }
 
+function sanitizeStateSnapshot(state) {
+  if (state == null) return null;
+  if (!isPlainObject(state)) throw createHttpError(400, "Invalid app state.");
+  if (state.version !== 2 || !isPlainObject(state.days)) throw createHttpError(400, "Invalid app state.");
+
+  const days = {};
+  const entries = Object.entries(state.days).filter(([date]) => isDateKey(date)).slice(0, MAX_STATE_DAYS);
+  let totalTasks = 0;
+
+  for (const [date, day] of entries) {
+    if (!isPlainObject(day)) continue;
+    const tasks = Array.isArray(day.tasks) ? day.tasks.slice(0, MAX_TASKS_PER_DAY) : [];
+    const remainingTaskSlots = MAX_TOTAL_STATE_TASKS - totalTasks;
+    if (remainingTaskSlots <= 0) break;
+
+    const sanitizedTasks = tasks.slice(0, remainingTaskSlots).map(sanitizeTaskState).filter(Boolean);
+    totalTasks += sanitizedTasks.length;
+    days[date] = {
+      date,
+      capacityHours: clampNumber(day.capacityHours, 1, 16, 6),
+      tasks: sanitizedTasks,
+      active: sanitizeActiveState(day.active, sanitizedTasks),
+      pendingReviewTaskId: sanitizeTaskReference(day.pendingReviewTaskId, sanitizedTasks),
+      showReport: Boolean(day.showReport),
+      activeView: day.activeView === "timer" ? "timer" : "timebox",
+      customTags: [],
+    };
+  }
+
+  const selectedDate = isDateKey(state.selectedDate) && days[state.selectedDate] ? state.selectedDate : Object.keys(days)[0] || getServerDateKey();
+  if (!days[selectedDate]) {
+    days[selectedDate] = {
+      date: selectedDate,
+      capacityHours: 6,
+      tasks: [],
+      active: null,
+      pendingReviewTaskId: null,
+      showReport: false,
+      activeView: "timebox",
+      customTags: [],
+    };
+  }
+
+  return {
+    version: 2,
+    selectedDate,
+    days,
+  };
+}
+
+function sanitizeTaskState(task) {
+  if (!isPlainObject(task)) return null;
+  const id = truncateText(task.id, MAX_TASK_ID_LENGTH);
+  const name = truncateText(task.name, MAX_TASK_NAME_LENGTH);
+  if (!id || !name) return null;
+
+  return {
+    id,
+    name,
+    tag: truncateText(task.tag, MAX_TASK_TAG_LENGTH),
+    estimateMinutes: clampInteger(task.estimateMinutes, 1, 24 * 60, 30),
+    note: truncateText(task.note, MAX_TASK_NOTE_LENGTH),
+    order: toNullableNumber(task.order),
+    priority: truncateText(task.priority, MAX_TASK_PRIORITY_LENGTH) || "medium",
+    actualSeconds: clampInteger(task.actualSeconds, 0, 30 * 24 * 60 * 60, 0),
+    status: truncateText(task.status, MAX_TASK_STATUS_LENGTH) || "pending",
+    extensions: clampInteger(task.extensions, 0, 1000, 0),
+    timeboxOrder: toNullableNumber(task.timeboxOrder),
+    timeboxStartAt: toNullableNumber(task.timeboxStartAt),
+    timeboxStartMinute: clampNullableInteger(task.timeboxStartMinute, 0, 24 * 60 - 1),
+    timeboxDurationMinutes: clampNullableInteger(task.timeboxDurationMinutes, 0, 24 * 60),
+  };
+}
+
+function sanitizeActiveState(active, tasks) {
+  if (!isPlainObject(active)) return null;
+  const taskId = sanitizeTaskReference(active.taskId, tasks);
+  if (!taskId) return null;
+  return {
+    taskId,
+    date: isDateKey(active.date) ? active.date : undefined,
+    totalSeconds: clampInteger(active.totalSeconds, 1, 24 * 60 * 60, 30 * 60),
+    remainingSeconds: clampInteger(active.remainingSeconds, 0, 24 * 60 * 60, 0),
+    startedAt: toNullableNumber(active.startedAt) || Date.now(),
+    isPaused: Boolean(active.isPaused),
+  };
+}
+
+function sanitizeTaskReference(id, tasks) {
+  const value = truncateText(id, MAX_TASK_ID_LENGTH);
+  return value && tasks.some((task) => task.id === value) ? value : null;
+}
+
+function isDateKey(value) {
+  const raw = String(value || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(raw)) return false;
+  const parsed = new Date(`${raw}T00:00:00.000Z`);
+  return !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 10) === raw;
+}
+
 function getTaskRowsFromState(userId, state) {
   if (!state?.days || typeof state.days !== "object") return [];
 
@@ -948,6 +1082,30 @@ function isDirectRun() {
   return process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url);
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function truncateText(value, maxLength) {
+  return String(value || "").trim().slice(0, maxLength);
+}
+
+function clampNumber(value, min, max, fallback) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return fallback;
+  return Math.max(min, Math.min(max, number));
+}
+
+function clampInteger(value, min, max, fallback) {
+  return Math.trunc(clampNumber(value, min, max, fallback));
+}
+
+function clampNullableInteger(value, min, max) {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  return Math.trunc(Math.max(min, Math.min(max, number)));
+}
+
 function toInteger(value) {
   const number = Number(value);
   return Number.isFinite(number) ? Math.trunc(number) : 0;
@@ -972,15 +1130,37 @@ function getBearerToken(request) {
   return auth.startsWith("Bearer ") ? auth.slice("Bearer ".length) : "";
 }
 
-async function readJsonBody(request) {
+function createHttpError(status, message) {
+  const error = new Error(message);
+  error.status = status;
+  return error;
+}
+
+async function readJsonBody(request, limitBytes = DEFAULT_JSON_BODY_LIMIT_BYTES) {
+  const contentLength = Number(getHeaderValue(request, "content-length"));
+  if (Number.isFinite(contentLength) && contentLength > limitBytes) {
+    throw createHttpError(413, "Request is too large.");
+  }
+
   const chunks = [];
-  for await (const chunk of request) chunks.push(chunk);
+  let totalBytes = 0;
+  for await (const chunk of request) {
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > limitBytes) throw createHttpError(413, "Request is too large.");
+    chunks.push(buffer);
+  }
   if (chunks.length === 0) return {};
-  return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  try {
+    return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+  } catch {
+    throw createHttpError(400, "Invalid JSON request body.");
+  }
 }
 
 function sendJson(response, statusCode, body, headers = {}) {
   response.writeHead(statusCode, {
+    ...SECURITY_HEADERS,
     "Content-Type": "application/json; charset=utf-8",
     "Cache-Control": "no-cache",
     ...headers,
@@ -989,6 +1169,6 @@ function sendJson(response, statusCode, body, headers = {}) {
 }
 
 function sendText(response, statusCode, body) {
-  response.writeHead(statusCode, { "Content-Type": "text/plain; charset=utf-8" });
+  response.writeHead(statusCode, { ...SECURITY_HEADERS, "Content-Type": "text/plain; charset=utf-8" });
   response.end(body);
 }

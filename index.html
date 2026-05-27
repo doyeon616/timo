@@ -8,9 +8,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon%202.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon%202.svg" />
-    <link rel="stylesheet" href="./variables.css?v=252" />
-    <link rel="stylesheet" href="./theme.css?v=252" />
-    <link rel="stylesheet" href="./styles.css?v=252" />
+    <link rel="stylesheet" href="./variables.css?v=254" />
+    <link rel="stylesheet" href="./theme.css?v=254" />
+    <link rel="stylesheet" href="./styles.css?v=254" />
   </head>
   <body>
     <section class="login-screen is-hidden" id="loginScreen" aria-label="Login">
@@ -35,12 +35,9 @@
             id="loginPassword"
             type="password"
             autocomplete="new-password"
-            placeholder="Create a secure password"
+            placeholder="Create password"
             minlength="8"
             maxlength="64"
-            oninput="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
-            onkeyup="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
-            onchange="var value=this.value;var states={length:value.length>=8&&value.length<=64,lowercase:/[a-z]/.test(value),uppercase:/[A-Z]/.test(value),number:/\d/.test(value),special:/[^A-Za-z0-9]/.test(value)};document.querySelectorAll('[data-password-rule]').forEach(function(rule){rule.classList.toggle('is-met',Boolean(states[rule.dataset.passwordRule]));});"
             required
           />
           <ul class="password-rules" id="passwordRules" aria-label="Password requirements">
@@ -52,7 +49,7 @@
           </ul>
         </label>
         <p class="auth-status" id="authStatus" aria-live="polite"></p>
-        <button class="primary-button" id="loginButton" type="button" onclick="window.loginTimo?.()">Create account</button>
+        <button class="primary-button" id="loginButton" type="button">Create account</button>
       </form>
     </section>
 
@@ -343,7 +340,7 @@
       </form>
     </div>
 
-    <button class="corner-menu-button" id="accountButton" type="button" aria-label="Open my page" onclick="window.openAccountModal ? window.openAccountModal() : document.getElementById('accountModal')?.classList.remove('is-hidden')">
+    <button class="corner-menu-button" id="accountButton" type="button" aria-label="Open my page">
       <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
         <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
         <circle cx="12" cy="7" r="4" />
@@ -372,23 +369,6 @@
       </article>
     </template>
 
-    <script>
-      window.updatePasswordChecklist = function () {
-        const input = document.querySelector("#loginPassword");
-        const rules = document.querySelectorAll("[data-password-rule]");
-        const value = input ? input.value : "";
-        const states = {
-          length: value.length >= 8 && value.length <= 64,
-          lowercase: /[a-z]/.test(value),
-          uppercase: /[A-Z]/.test(value),
-          number: /\d/.test(value),
-          special: /[^A-Za-z0-9]/.test(value),
-        };
-        rules.forEach((rule) => {
-          rule.classList.toggle("is-met", Boolean(states[rule.dataset.passwordRule]));
-        });
-      };
-    </script>
-    <script src="./app.js?v=252" defer></script>
+    <script src="./app.js?v=254" defer></script>
   </body>
 </html>

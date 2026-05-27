@@ -23,6 +23,7 @@ const USER_ROLES = new Set([
 ]);
 const LEGACY_TAG_RENAMES = new Map([["admin", "Health"]]);
 const PASSWORD_RULE_TEXT = "Use 8+ characters with uppercase, lowercase, number, and special character.";
+const AUTH_UNAVAILABLE_MESSAGE = "Authentication is temporarily unavailable. Please try again later.";
 const TAG_COLORS = new Map([
   ["personal", "#ff7ab6"],
   ["work", "#19d0e8"],
@@ -267,8 +268,6 @@ async function loginTimo() {
   showApp();
 }
 
-window.loginTimo = loginTimo;
-
 function setAuthMode(mode) {
   authMode = mode === "login" ? "login" : "signup";
   const isLogin = authMode === "login";
@@ -281,7 +280,7 @@ function setAuthMode(mode) {
   elements.loginNameField.classList.toggle("is-hidden", isLogin);
   elements.loginName.required = !isLogin;
   elements.loginPassword.autocomplete = isLogin ? "current-password" : "new-password";
-  elements.loginPassword.placeholder = isLogin ? "Password" : PASSWORD_RULE_TEXT;
+  elements.loginPassword.placeholder = isLogin ? "Password" : "Create password";
   elements.loginPassword.minLength = isLogin ? 1 : 8;
   elements.loginPassword.setCustomValidity("");
   elements.passwordRuleList.classList.toggle("is-hidden", isLogin);
@@ -323,10 +322,6 @@ function updatePasswordRuleList(password) {
     rule.classList.toggle("is-met", Boolean(rules[rule.dataset.passwordRule]));
   });
 }
-
-window.updatePasswordChecklist = () => {
-  updatePasswordRuleList(elements.loginPassword.value);
-};
 
 async function requestSignupEmailVerification(signup) {
   if (API_BASE) {
@@ -405,7 +400,14 @@ function getAuthDisplayMessage(message) {
   if (waitSeconds) return `Please wait ${waitSeconds} seconds before requesting another verification email.`;
   if (/invalid.*(login|credential|password)|email or password/i.test(raw)) return "The password is incorrect.";
   if (/role|profession|schema cache|column/i.test(raw)) return "Unable to save role right now. Please try again later.";
-  return raw || "Unable to connect to the server.";
+  if (
+    /authentication is temporarily unavailable|unable to connect|unable to send|check your email|verify your email|already verified|too many authentication attempts|password|characters|name and email/i.test(
+      raw,
+    )
+  ) {
+    return raw;
+  }
+  return raw ? AUTH_UNAVAILABLE_MESSAGE : "Unable to connect to the server.";
 }
 
 function getAuthWaitSeconds(message) {
@@ -1165,9 +1167,6 @@ function closeAccountModal() {
   elements.accountModal.classList.add("is-hidden");
   elements.accountModal.style.display = "";
 }
-
-window.openAccountModal = openAccountModal;
-window.closeAccountModal = closeAccountModal;
 
 function renderAccountButton() {
   const user = getCurrentUser();
