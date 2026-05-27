@@ -15,6 +15,8 @@ const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const APP_ORIGIN = normalizeOrigin(
   process.env.APP_ORIGIN || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : ""),
 );
+const CANONICAL_APP_ORIGIN = "https://timo.kr";
+const CANONICAL_APP_HOSTS = new Set(["timo.kr", "www.timo.kr"]);
 const USE_SUPABASE = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY);
 const IS_SERVERLESS = Boolean(process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME);
 
@@ -374,9 +376,22 @@ function getRequestOrigin(request) {
   return normalizeOrigin(`${protocol.split(",")[0]}://${host.split(",")[0]}`);
 }
 
+function getAuthRedirectOrigin(request) {
+  const requestOrigin = getRequestOrigin(request);
+  const requestHost = getOriginHost(requestOrigin);
+  if (CANONICAL_APP_HOSTS.has(requestHost)) return CANONICAL_APP_ORIGIN;
+  if (IS_SERVERLESS && requestHost.endsWith(".vercel.app")) return CANONICAL_APP_ORIGIN;
+
+  const appOriginHost = getOriginHost(APP_ORIGIN);
+  if (CANONICAL_APP_HOSTS.has(appOriginHost)) return CANONICAL_APP_ORIGIN;
+  if (IS_SERVERLESS && appOriginHost.endsWith(".vercel.app")) return CANONICAL_APP_ORIGIN;
+
+  return APP_ORIGIN || requestOrigin;
+}
+
 async function signUpWithSupabaseAuth(request, { name, email, password }) {
   ensureSupabaseAuthAvailable();
-  const redirectTo = APP_ORIGIN || getRequestOrigin(request);
+  const redirectTo = getAuthRedirectOrigin(request);
   try {
     return await supabaseAuthRequest(`/signup?redirect_to=${encodeURIComponent(redirectTo)}`, {
       method: "POST",
@@ -1071,6 +1086,14 @@ function normalizeSupabaseUrl(value) {
 
 function normalizeOrigin(value) {
   return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function getOriginHost(origin) {
+  try {
+    return new URL(origin).hostname.toLowerCase();
+  } catch {
+    return "";
+  }
 }
 
 function normalizeConfiguredValue(value, ...placeholders) {

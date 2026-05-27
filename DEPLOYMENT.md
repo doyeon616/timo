@@ -57,8 +57,9 @@ Open `http://localhost:3000`.
    - `SUPABASE_URL`
    - `SUPABASE_ANON_KEY`
    - `SUPABASE_SERVICE_ROLE_KEY`
-   - `APP_ORIGIN`
-6. Deploy.
+   - `APP_ORIGIN` = `https://timo.kr`
+6. In Supabase Auth URL Configuration, set the production site URL to `https://timo.kr` and add `https://timo.kr` to redirect URLs.
+7. Deploy.
 
 Vercel serves the frontend as static files and routes `/api/*` to `api/index.mjs`.
 
@@ -74,7 +75,7 @@ Set:
   - `SUPABASE_URL`
   - `SUPABASE_ANON_KEY`
   - `SUPABASE_SERVICE_ROLE_KEY`
-  - `APP_ORIGIN`
+  - `APP_ORIGIN` = `https://timo.kr` for production
 
 The server already reads `process.env.PORT`, so the host can assign the public port automatically.
 
