@@ -8,9 +8,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon%202.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon%202.svg" />
-    <link rel="stylesheet" href="./variables.css?v=249" />
-    <link rel="stylesheet" href="./theme.css?v=249" />
-    <link rel="stylesheet" href="./styles.css?v=249" />
+    <link rel="stylesheet" href="./variables.css?v=250" />
+    <link rel="stylesheet" href="./theme.css?v=250" />
+    <link rel="stylesheet" href="./styles.css?v=250" />
   </head>
   <body>
     <section class="login-screen is-hidden" id="loginScreen" aria-label="Login">
@@ -360,7 +360,13 @@
             <span class="task-tag"></span>
             <span class="task-estimate"></span>
           </div>
-          <small class="task-note" hidden></small>
+          <span class="task-note-icon" role="img" aria-label="Memo added" hidden>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M3 5h18" />
+              <path d="M3 12h18" />
+              <path d="M3 19h18" />
+            </svg>
+          </span>
         </div>
         <div class="task-actions">
           <button class="icon-button start" type="button" aria-label="Start timebox">
@@ -390,6 +396,6 @@
         });
       };
     </script>
-    <script src="./app.js?v=249" defer></script>
+    <script src="./app.js?v=250" defer></script>
   </body>
 </html>

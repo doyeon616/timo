@@ -1248,21 +1248,23 @@ button:disabled {
   white-space: nowrap;
 }
 
-.task-note {
-  display: block;
+.task-note-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
   margin: var(--spacing-4) 0 0 22px;
   color: color-mix(in srgb, var(--color-canvas-white) 62%, transparent);
-  font-family: var(--font-dm-sans);
-  font-size: calc(var(--text-caption) - 2px);
-  font-weight: var(--font-weight-regular);
-  line-height: 1.35;
-  overflow: hidden;
-  overflow-wrap: anywhere;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.task-note[hidden] {
+.task-note-icon svg {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.task-note-icon[hidden] {
   display: none;
 }
 
