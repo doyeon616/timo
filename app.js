@@ -10,6 +10,17 @@ const TIMELINE_START_MINUTE = 60;
 const TIMELINE_END_MINUTE = 12 * 60;
 const TIMEBOX_STATUSES = new Set(["active", "review", "done", "paused"]);
 const DEFAULT_TAGS = ["Personal", "Work", "Health", "Study", "Idea"];
+const USER_ROLES = new Set([
+  "Student",
+  "Designer",
+  "Developer",
+  "Product Manager",
+  "Marketer",
+  "Founder",
+  "Freelancer",
+  "Teacher",
+  "Other",
+]);
 const LEGACY_TAG_RENAMES = new Map([["admin", "Health"]]);
 const PASSWORD_RULE_TEXT = "Use 8+ characters with uppercase, lowercase, number, and special character.";
 const TAG_COLORS = new Map([
@@ -37,6 +48,7 @@ let serverSyncTimer = null;
 let deferredInstallPrompt = null;
 let activitySyncTimer = null;
 let lastTrackedActivityDate = null;
+let isRolePreviewSession = false;
 
 const elements = {
   onboardingModal: document.querySelector("#onboardingModal"),
@@ -44,6 +56,9 @@ const elements = {
   onboardingCloseButton: document.querySelector("#onboardingCloseButton"),
   installAppButton: document.querySelector("#installAppButton"),
   installStatus: document.querySelector("#installStatus"),
+  roleOnboardingModal: document.querySelector("#roleOnboardingModal"),
+  roleOptions: document.querySelector("#roleOptions"),
+  roleOnboardingStatus: document.querySelector("#roleOnboardingStatus"),
   loginScreen: document.querySelector("#loginScreen"),
   loginForm: document.querySelector("#loginForm"),
   loginButton: document.querySelector("#loginButton"),
@@ -63,6 +78,7 @@ const elements = {
   accountCloseButton: document.querySelector("#accountCloseButton"),
   accountName: document.querySelector("#accountName"),
   accountEmail: document.querySelector("#accountEmail"),
+  accountRole: document.querySelector("#accountRole"),
   logoutButton: document.querySelector("#logoutButton"),
   deleteAccountButton: document.querySelector("#deleteAccountButton"),
   taskModal: document.querySelector("#taskModal"),
@@ -84,7 +100,9 @@ const elements = {
   overloadText: document.querySelector("#overloadText"),
   doneText: document.querySelector("#doneText"),
   actualText: document.querySelector("#actualText"),
+  todoAddButton: document.querySelector("#todoAddButton"),
   taskForm: document.querySelector("#taskForm"),
+  taskTooltabCloseButton: document.querySelector("#taskTooltabCloseButton"),
   taskName: document.querySelector("#taskName"),
   taskTag: document.querySelector("#taskTag"),
   tagOptions: document.querySelector("#tagOptions"),
@@ -154,6 +172,12 @@ elements.onboardingModal.addEventListener("click", (event) => {
 
 elements.installAppButton.addEventListener("click", () => {
   installPwaApp();
+});
+
+elements.roleOptions.addEventListener("click", (event) => {
+  const button = event.target.closest("[data-role]");
+  if (!button) return;
+  saveUserRole(button.dataset.role);
 });
 
 elements.loginForm.addEventListener("submit", (event) => {
@@ -230,6 +254,7 @@ async function loginTimo() {
     name: authResult.name || name || email.split("@")[0],
     email: authResult.email || email,
     emailVerified: authResult.verified,
+    role: authResult.role || "",
     token: authResult.token,
     refreshToken: authResult.refreshToken,
     expiresAt: authResult.expiresAt,
@@ -349,6 +374,7 @@ function normalizeAuthResponse(data) {
     verified: Boolean(data.user?.emailVerified),
     name: data.user?.name,
     email: data.user?.email,
+    role: data.user?.role || data.user?.profession || "",
     token: data.token,
     refreshToken: data.refreshToken,
     expiresAt: data.expiresAt,
@@ -356,11 +382,30 @@ function normalizeAuthResponse(data) {
   };
 }
 
+async function hydrateUserProfile() {
+  if (!API_BASE || !getCurrentUser()?.token) return;
+
+  try {
+    const data = await apiRequest("/me");
+    const current = getCurrentUser();
+    if (!data.user || !current) return;
+    sessionUser = {
+      ...current,
+      ...data.user,
+      token: current.token,
+      refreshToken: current.refreshToken,
+      expiresAt: current.expiresAt,
+    };
+    storeSessionUser(sessionUser);
+  } catch {}
+}
+
 function getAuthDisplayMessage(message) {
   const raw = String(message || "").trim();
   const waitSeconds = getAuthWaitSeconds(raw);
   if (waitSeconds) return `Please wait ${waitSeconds} seconds before requesting another verification email.`;
   if (/invalid.*(login|credential|password)|email or password/i.test(raw)) return "The password is incorrect.";
+  if (/role|profession|schema cache|column/i.test(raw)) return "Unable to save role right now. Please try again later.";
   return raw || "Unable to connect to the server.";
 }
 
@@ -436,6 +481,7 @@ async function refreshCurrentSession() {
     name: refreshed.name || current.name,
     email: refreshed.email || current.email,
     emailVerified: refreshed.verified,
+    role: refreshed.role || refreshed.profession || current.role || current.profession || "",
     token: refreshed.token,
     refreshToken: refreshed.refreshToken || current.refreshToken,
     expiresAt: refreshed.expiresAt,
@@ -516,6 +562,14 @@ elements.taskList.addEventListener("keydown", (event) => {
   openTaskModal(taskItem.dataset.taskId);
 });
 
+elements.todoAddButton.addEventListener("click", () => {
+  toggleTaskTooltab();
+});
+
+elements.taskTooltabCloseButton.addEventListener("click", () => {
+  closeTaskTooltab();
+});
+
 elements.taskForm.addEventListener("submit", (event) => {
   event.preventDefault();
   const name = elements.taskName.value.trim();
@@ -539,6 +593,7 @@ elements.taskForm.addEventListener("submit", (event) => {
   elements.taskTag.value = "";
   elements.taskMinutes.value = "30";
   saveAndRender();
+  elements.taskName.focus();
 });
 
 elements.capacityInput.addEventListener("change", () => {
@@ -651,6 +706,7 @@ document.addEventListener("keydown", (event) => {
     }
     closeTaskModal();
     closeAccountModal();
+    closeTaskTooltab();
     return;
   }
 
@@ -817,9 +873,35 @@ function getPersistableDayState(dayState) {
 
 async function initAuthView() {
   await consumeAuthRedirectHash();
+  enableRoleOnboardingPreview();
   getCurrentUser();
-  await hydrateStateFromServer();
+  if (!isRolePreviewSession) {
+    await hydrateUserProfile();
+    await hydrateStateFromServer();
+  }
   showApp();
+}
+
+function enableRoleOnboardingPreview() {
+  if (!isRoleOnboardingPreviewRequest()) return;
+
+  isRolePreviewSession = true;
+  sessionUser = {
+    name: "Preview User",
+    email: "preview@timo.local",
+    emailVerified: true,
+    token: "role-preview",
+    refreshToken: "",
+    expiresAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    loggedInAt: new Date().toISOString(),
+    role: "",
+  };
+}
+
+function isRoleOnboardingPreviewRequest() {
+  const params = new URLSearchParams(window.location.search);
+  const isPreviewHost = ["localhost", "127.0.0.1", ""].includes(window.location.hostname);
+  return isPreviewHost && (params.has("role-onboarding") || params.has("profession-onboarding"));
 }
 
 async function consumeAuthRedirectHash() {
@@ -919,13 +1001,16 @@ function showApp() {
   if (getCurrentUser()) {
     hideOnboarding();
     trackDailyActivity();
+    showRoleOnboardingIfNeeded();
   } else {
+    hideRoleOnboarding();
     showOnboarding();
   }
 }
 
 function showLogin() {
   hideOnboarding();
+  hideRoleOnboarding();
   elements.loginScreen.classList.remove("is-hidden");
   document.title = BASE_TITLE;
   requestAnimationFrame(() => elements.loginName.focus());
@@ -940,6 +1025,88 @@ function showOnboarding() {
 
 function hideOnboarding() {
   elements.onboardingModal.classList.add("is-hidden");
+}
+
+function showRoleOnboardingIfNeeded() {
+  const user = getCurrentUser();
+  if (!user || (!isRolePreviewSession && (user.role || user.profession))) {
+    hideRoleOnboarding();
+    return;
+  }
+
+  elements.roleOnboardingStatus.textContent = "";
+  elements.roleOnboardingModal.classList.remove("is-hidden");
+}
+
+function hideRoleOnboarding() {
+  elements.roleOnboardingModal.classList.add("is-hidden");
+}
+
+function toggleTaskTooltab() {
+  if (elements.taskForm.classList.contains("is-hidden")) {
+    openTaskTooltab();
+    return;
+  }
+
+  closeTaskTooltab();
+}
+
+function openTaskTooltab() {
+  elements.taskForm.classList.remove("is-hidden");
+  elements.taskForm.setAttribute("aria-hidden", "false");
+  elements.todoAddButton.setAttribute("aria-expanded", "true");
+  requestAnimationFrame(() => elements.taskName.focus());
+}
+
+function closeTaskTooltab() {
+  elements.taskForm.classList.add("is-hidden");
+  elements.taskForm.setAttribute("aria-hidden", "true");
+  elements.todoAddButton.setAttribute("aria-expanded", "false");
+}
+
+async function saveUserRole(role) {
+  if (!USER_ROLES.has(role)) return;
+
+  const buttons = elements.roleOptions.querySelectorAll("button");
+  buttons.forEach((button) => {
+    button.disabled = true;
+    button.classList.toggle("is-selected", button.dataset.role === role);
+  });
+  elements.roleOnboardingStatus.textContent = "Saving...";
+
+  if (isRolePreviewSession) {
+    sessionUser = {
+      ...getCurrentUser(),
+      role,
+    };
+    renderAccountButton();
+    hideRoleOnboarding();
+    return;
+  }
+
+  try {
+    const data = await apiRequest("/me", {
+      method: "PATCH",
+      body: { role },
+    });
+    const current = getCurrentUser();
+    sessionUser = {
+      ...current,
+      ...data.user,
+      role: data.user?.role || role,
+      token: current?.token,
+      refreshToken: current?.refreshToken,
+      expiresAt: current?.expiresAt,
+    };
+    storeSessionUser(sessionUser);
+    renderAccountButton();
+    hideRoleOnboarding();
+  } catch (error) {
+    elements.roleOnboardingStatus.textContent = getAuthDisplayMessage(error.message);
+    buttons.forEach((button) => {
+      button.disabled = false;
+    });
+  }
 }
 
 async function installPwaApp() {
@@ -989,6 +1156,7 @@ function openAccountModal() {
 
   elements.accountName.textContent = user.name || "-";
   elements.accountEmail.textContent = user.email || "-";
+  elements.accountRole.textContent = user.role || user.profession || "-";
   elements.accountModal.classList.remove("is-hidden");
   elements.accountModal.style.display = "grid";
   elements.accountCloseButton.focus();
@@ -1152,6 +1320,7 @@ function queueServerStateSync(snapshot, delay = 500) {
 }
 
 function trackDailyActivity(delay = 0) {
+  if (isRolePreviewSession) return;
   if (!API_BASE || !getCurrentUser()?.token) return;
   const activityDate = getLocalDateKey();
   if (lastTrackedActivityDate === activityDate) return;
@@ -1697,6 +1866,7 @@ function renderTimeboxes() {
   }
 
   const totalMinutes = tasks.reduce((sum, task) => sum + getTaskDurationMinutes(task), 0);
+  const durationLabel = tasks.some((task) => state.active?.taskId === task.id) ? "scheduled" : "recorded";
   const timelineStart = Math.min(TIMELINE_START_MINUTE, getTimelineStartMinute(tasks));
   const timelineEnd = Math.max(TIMELINE_END_MINUTE, getTimelineEndMinute(tasks));
   const trackMinutes = timelineEnd - timelineStart;
@@ -1705,7 +1875,7 @@ function renderTimeboxes() {
 
   elements.timeboxTrack.style.height = `${trackHeight}px`;
   elements.timeAxis.style.height = `${trackHeight}px`;
-  elements.timeboxMeta.textContent = `${formatTimeOfDay(timelineStart)} - ${formatTimeOfDay(timelineEnd)} · ${formatMinutes(totalMinutes)} recorded`;
+  elements.timeboxMeta.textContent = `${formatTimeOfDay(timelineStart)} - ${formatTimeOfDay(timelineEnd)} · ${formatMinutes(totalMinutes)} ${durationLabel}`;
   renderHourMarkers(timelineHeight, timelineStart, trackMinutes / 60);
   renderCurrentTimeLine(timelineStart, timelineHeight);
 
@@ -1895,6 +2065,12 @@ function getTaskStartMinute(task) {
 }
 
 function getTaskDurationMinutes(task) {
+  if (state.active?.taskId === task.id) {
+    const elapsedSeconds = Number(task.actualSeconds || 0);
+    const remainingSeconds = Number(state.active.remainingSeconds || 0);
+    return Math.max(1, (elapsedSeconds + remainingSeconds) / 60);
+  }
+
   return Math.max(0, Number(task.actualSeconds || 0) / 60);
 }
 

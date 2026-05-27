@@ -61,6 +61,17 @@ const RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000;
 const EMAIL_VERIFICATION_MESSAGE = "Check your email to verify your account before logging in.";
 const AUTH_INVALID_PASSWORD_MESSAGE = "The password is incorrect.";
 const AUTH_EMAIL_WAIT_FALLBACK_SECONDS = 60;
+const USER_ROLES = new Set([
+  "Student",
+  "Designer",
+  "Developer",
+  "Product Manager",
+  "Marketer",
+  "Founder",
+  "Freelancer",
+  "Teacher",
+  "Other",
+]);
 const rateLimitBuckets = new Map();
 let lastRateLimitSweep = 0;
 
@@ -183,6 +194,13 @@ async function handleApi(request, response, url) {
 
   if (request.method === "GET" && url.pathname === "/api/me") {
     sendJson(response, 200, { user: publicUser(user) });
+    return;
+  }
+
+  if (request.method === "PATCH" && url.pathname === "/api/me") {
+    const body = await readJsonBody(request);
+    const updatedUser = await updateUserRole(user, body.role ?? body.profession);
+    sendJson(response, 200, { user: publicUser(updatedUser) });
     return;
   }
 
@@ -313,6 +331,7 @@ function publicUser(user) {
     name: user.name,
     email: user.email,
     emailVerified: Boolean(user.emailVerified),
+    role: user.role || user.profession || "",
   };
 }
 
@@ -621,6 +640,7 @@ async function getOrCreateUserProfile(authUser) {
       name: existing.name || fallbackName,
       email,
       emailVerified,
+      role: existing.role || existing.profession || "",
       updatedAt: new Date().toISOString(),
     };
     if (
@@ -639,6 +659,7 @@ async function getOrCreateUserProfile(authUser) {
     name: fallbackName,
     email,
     emailVerified,
+    role: "",
     state: null,
     createdAt: now,
     updatedAt: now,
@@ -674,6 +695,36 @@ async function updateUserState(user, state) {
     headers: { Prefer: "return=minimal" },
   });
   await syncTasksForUser(user, state);
+}
+
+async function updateUserRole(user, role) {
+  ensureSupabaseAuthAvailable();
+  const nextRole = normalizeUserRole(role);
+  if (!nextRole) {
+    const error = new Error("Choose a valid role.");
+    error.status = 400;
+    throw error;
+  }
+
+  const updatedAt = new Date().toISOString();
+  await supabaseRequest(`/timo_users?id=eq.${encodeURIComponent(user.id)}`, {
+    method: "PATCH",
+    body: {
+      role: nextRole,
+      updated_at: updatedAt,
+    },
+    headers: { Prefer: "return=minimal" },
+  });
+  return {
+    ...user,
+    role: nextRole,
+    updatedAt,
+  };
+}
+
+function normalizeUserRole(role) {
+  const value = String(role || "").trim();
+  return USER_ROLES.has(value) ? value : "";
 }
 
 async function syncTasksForUser(user, state) {
@@ -868,6 +919,7 @@ function fromSupabaseProfile(row) {
     name: row.name,
     email: row.email,
     emailVerified: Boolean(row.email_verified),
+    role: row.role || row.profession || "",
     state: row.app_state || null,
     createdAt: row.created_at,
     updatedAt: row.updated_at,

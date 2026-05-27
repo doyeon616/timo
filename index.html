@@ -8,9 +8,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon%202.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon%202.svg" />
-    <link rel="stylesheet" href="./variables.css?v=222" />
-    <link rel="stylesheet" href="./theme.css?v=222" />
-    <link rel="stylesheet" href="./styles.css?v=222" />
+    <link rel="stylesheet" href="./variables.css?v=239" />
+    <link rel="stylesheet" href="./theme.css?v=239" />
+    <link rel="stylesheet" href="./styles.css?v=239" />
   </head>
   <body>
     <section class="login-screen is-hidden" id="loginScreen" aria-label="Login">
@@ -79,6 +79,28 @@
       </div>
     </section>
 
+    <section class="role-onboarding-modal is-hidden" id="roleOnboardingModal" role="dialog" aria-modal="true" aria-labelledby="roleOnboardingTitle">
+      <div class="role-onboarding-card">
+        <img class="role-onboarding-logo" src="./logo.svg" alt="Timo" />
+        <div class="role-onboarding-copy">
+          <h1 id="roleOnboardingTitle">What do you do?</h1>
+          <p>Select the role that best matches how you plan your day.</p>
+        </div>
+        <div class="role-options" id="roleOptions" aria-label="Choose your role">
+          <button type="button" data-role="Student">Student</button>
+          <button type="button" data-role="Designer">Designer</button>
+          <button type="button" data-role="Developer">Developer</button>
+          <button type="button" data-role="Product Manager">Product Manager</button>
+          <button type="button" data-role="Marketer">Marketer</button>
+          <button type="button" data-role="Founder">Founder</button>
+          <button type="button" data-role="Freelancer">Freelancer</button>
+          <button type="button" data-role="Teacher">Teacher</button>
+          <button type="button" data-role="Other">Other</button>
+        </div>
+        <p class="role-onboarding-status" id="roleOnboardingStatus" aria-live="polite"></p>
+      </div>
+    </section>
+
     <div class="app-shell is-hidden" id="appShell">
       <header class="topbar">
         <div class="brand-stack">
@@ -91,7 +113,15 @@
         <section class="workspace">
           <div class="plan-panel">
             <div class="todo-dock">
-              <p class="todo-caption">To do</p>
+              <div class="todo-header">
+                <p class="todo-caption">To do</p>
+                <button class="todo-add-button" id="todoAddButton" type="button" aria-label="Add task" aria-controls="taskForm" aria-expanded="false">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M5 12h14" />
+                    <path d="M12 5v14" />
+                  </svg>
+                </button>
+              </div>
               <div class="task-list" id="taskList" aria-live="polite"></div>
             </div>
           </div>
@@ -199,7 +229,13 @@
           <div class="bars" id="reportBars"></div>
         </section>
       </main>
-      <form class="bottom-nav" id="taskForm">
+      <form class="bottom-nav is-hidden" id="taskForm" aria-hidden="true">
+        <button class="task-tooltab-close" id="taskTooltabCloseButton" type="button" aria-label="Close task tooltab">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <path d="M18 6 6 18" />
+            <path d="m6 6 12 12" />
+          </svg>
+        </button>
         <input id="taskName" type="text" placeholder="Add a task" autocomplete="off" required />
         <select id="taskTag" aria-label="Tag"></select>
         <datalist id="tagOptions"></datalist>
@@ -251,6 +287,10 @@
           <div>
             <dt>Email</dt>
             <dd id="accountEmail"></dd>
+          </div>
+          <div>
+            <dt>Role</dt>
+            <dd id="accountRole"></dd>
           </div>
         </dl>
         <button class="ghost-button" id="logoutButton" type="button">Log out</button>
@@ -361,6 +401,6 @@
         });
       };
     </script>
-    <script src="./app.js?v=222" defer></script>
+    <script src="./app.js?v=239" defer></script>
   </body>
 </html>

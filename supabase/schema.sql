@@ -7,6 +7,7 @@ create table public.timo_users (
   name text not null,
   email text not null unique,
   email_verified boolean not null default false,
+  role text,
   app_state jsonb,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()

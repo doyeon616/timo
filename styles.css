@@ -326,6 +326,96 @@ button {
   display: none;
 }
 
+.role-onboarding-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 150;
+  display: grid;
+  place-items: center;
+  padding: var(--spacing-24);
+  background: color-mix(in srgb, var(--color-midnight-base) 58%, transparent);
+}
+
+.role-onboarding-card {
+  display: grid;
+  gap: var(--spacing-20);
+  width: min(480px, calc(100vw - 48px));
+  max-height: calc(100vh - 48px);
+  overflow: auto;
+  padding: var(--spacing-24);
+  border-radius: var(--radius-cards);
+  background: #f2efe8;
+  color: #000000;
+  box-shadow: 0 22px 70px color-mix(in srgb, #000000 42%, transparent);
+}
+
+.role-onboarding-logo {
+  display: block;
+  width: 42px;
+  height: auto;
+  filter: invert(1);
+}
+
+.role-onboarding-copy {
+  display: grid;
+  gap: var(--spacing-8);
+}
+
+.role-onboarding-copy h1 {
+  margin: 0;
+  color: #000000;
+  font-family: var(--font-geist);
+  font-size: 32px;
+  font-weight: var(--font-weight-bold);
+  line-height: 1.08;
+  letter-spacing: 0;
+}
+
+.role-onboarding-copy p:last-child {
+  margin: 0;
+  color: color-mix(in srgb, #000000 68%, transparent);
+  font-size: 15px;
+  line-height: 1.45;
+}
+
+.role-options {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--spacing-8);
+}
+
+.role-options button {
+  min-height: 44px;
+  border: 1px solid color-mix(in srgb, #000000 18%, transparent);
+  border-radius: var(--radius-buttons);
+  background: transparent;
+  color: #000000;
+  font-size: calc(var(--text-caption) - 1px);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: 0;
+}
+
+.role-options button:hover:not(:disabled),
+.role-options button.is-selected {
+  border-color: #000000;
+  background: #000000;
+  color: #ffffff;
+}
+
+.role-onboarding-status {
+  min-height: 0;
+  margin: 0;
+  color: color-mix(in srgb, #000000 68%, transparent);
+  font-size: calc(var(--text-caption) - 1px);
+  font-weight: var(--font-weight-regular);
+  line-height: 1.4;
+  text-align: center;
+}
+
+.role-onboarding-status:empty {
+  display: none;
+}
+
 .app-shell {
   position: relative;
   overflow: visible;
@@ -364,10 +454,11 @@ button {
 .topbar {
   position: relative;
   z-index: 1;
+  align-items: flex-start;
   justify-content: space-between;
   gap: var(--spacing-16);
   margin-bottom: 0;
-  transform: translateY(48px);
+  min-height: 42px;
 }
 
 .brand-stack {
@@ -994,14 +1085,45 @@ button:disabled {
   padding-bottom: 0;
 }
 
-.todo-caption {
+.todo-header {
   position: sticky;
   top: 0;
   z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   flex: 0 0 auto;
   margin-bottom: var(--spacing-12);
+  padding-right: var(--spacing-8);
+}
+
+.todo-caption {
+  margin: 0;
   color: var(--color-canvas-white);
   font-weight: var(--font-weight-bold);
+}
+
+.todo-add-button {
+  display: grid;
+  place-items: center;
+  width: 28px;
+  min-height: 28px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--color-canvas-white);
+  padding: 0;
+}
+
+.todo-add-button:hover,
+.todo-add-button[aria-expanded="true"] {
+  background: transparent;
+  color: var(--color-canvas-white);
+  opacity: 0.72;
+}
+
+.todo-add-button svg {
+  display: block;
 }
 
 .empty-state {
@@ -1059,13 +1181,29 @@ button:disabled {
 }
 
 .task-check {
+  appearance: none;
   width: 14px;
   min-height: 14px;
   height: 14px;
-  accent-color: var(--color-interactive-glow);
   flex: 0 0 auto;
   margin: 1px 0 0;
+  border: 1px solid color-mix(in srgb, var(--color-canvas-white) 72%, transparent);
+  border-radius: 3px;
+  background: transparent;
   padding: 0;
+}
+
+.task-check:checked {
+  border-color: var(--color-interactive-glow);
+  background-color: var(--color-interactive-glow);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23000000' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E");
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 10px 10px;
+}
+
+.task-check:disabled {
+  opacity: 0.5;
 }
 
 .task-main strong {
@@ -1701,6 +1839,49 @@ button:disabled {
   transform: translateX(50%);
 }
 
+.bottom-nav.is-hidden {
+  display: none;
+}
+
+.task-tooltab-close {
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  min-height: 32px;
+  border: 1px solid color-mix(in srgb, var(--color-canvas-white) 32%, transparent);
+  border-radius: 50%;
+  background: #000000;
+  color: var(--color-canvas-white);
+  opacity: 0;
+  padding: 0;
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition:
+    background 120ms ease,
+    color 120ms ease,
+    opacity 120ms ease;
+}
+
+.bottom-nav:hover .task-tooltab-close,
+.bottom-nav:focus-within .task-tooltab-close {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.task-tooltab-close:hover {
+  border-color: color-mix(in srgb, var(--color-canvas-white) 56%, transparent);
+  background: #000000;
+  color: var(--color-canvas-white);
+  opacity: 1;
+}
+
+.task-tooltab-close svg {
+  display: block;
+}
+
 .bottom-nav input,
 .bottom-nav select {
   min-height: 40px;
@@ -1793,6 +1974,17 @@ button:disabled {
     border-radius: var(--radius-cards);
   }
 
+  .role-onboarding-modal {
+    padding: var(--spacing-16);
+  }
+
+  .role-onboarding-card {
+    width: min(100%, 440px);
+    max-height: calc(100vh - 32px);
+    padding: var(--spacing-24);
+    border-radius: var(--radius-cards);
+  }
+
   .onboarding-copy h1 {
     font-size: 30px;
   }
@@ -1810,7 +2002,7 @@ button:disabled {
     align-items: flex-start;
     min-height: 42px;
     margin-bottom: var(--spacing-16);
-    transform: none;
+    transform: translateY(-12px);
   }
 
   .corner-menu-button {
@@ -1910,7 +2102,21 @@ button:disabled {
     padding: var(--spacing-20);
   }
 
+  .role-onboarding-card {
+    gap: var(--spacing-14, 14px);
+    width: min(100%, 320px);
+    padding: var(--spacing-20);
+  }
+
+  .role-options {
+    grid-template-columns: 1fr;
+  }
+
   .onboarding-logo {
+    width: 36px;
+  }
+
+  .role-onboarding-logo {
     width: 36px;
   }
 
@@ -1919,6 +2125,11 @@ button:disabled {
   }
 
   .onboarding-copy h1 {
+    font-size: 24px;
+    line-height: 1.08;
+  }
+
+  .role-onboarding-copy h1 {
     font-size: 24px;
     line-height: 1.08;
   }
