@@ -213,7 +213,7 @@ async function loginTimo() {
         ? await requestSignupEmailVerification({ name, email, password })
         : await requestExistingAccountLogin({ email, password });
   } catch (error) {
-    elements.authStatus.textContent = error.message || "Unable to connect to the server.";
+    elements.authStatus.textContent = getAuthDisplayMessage(error.message);
     elements.loginButton.disabled = false;
     return;
   }
@@ -354,6 +354,20 @@ function normalizeAuthResponse(data) {
     expiresAt: data.expiresAt,
     message: verificationMessage,
   };
+}
+
+function getAuthDisplayMessage(message) {
+  const raw = String(message || "").trim();
+  const waitSeconds = getAuthWaitSeconds(raw);
+  if (waitSeconds) return `Please wait ${waitSeconds} seconds before requesting another verification email.`;
+  if (/invalid.*(login|credential|password)|email or password/i.test(raw)) return "The password is incorrect.";
+  return raw || "Unable to connect to the server.";
+}
+
+function getAuthWaitSeconds(message) {
+  const match = message.match(/after\s+(\d+)\s*seconds?/i);
+  if (match) return Number(match[1]);
+  return /security purposes|too many requests|rate limit/i.test(message) ? 60 : null;
 }
 
 async function apiRequest(path, options = {}) {

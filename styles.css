@@ -1161,7 +1161,7 @@ button:disabled {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: var(--element-gap);
-  margin-top: -10px;
+  margin-top: -4px;
   margin-bottom: var(--spacing-12);
   padding: 3px;
   border: 1px solid var(--border-soft);
@@ -1969,7 +1969,7 @@ button:disabled {
   }
 
   .focus-tabs {
-    margin-top: var(--spacing-8);
+    margin-top: var(--spacing-14, 14px);
   }
 
   .date-browser {

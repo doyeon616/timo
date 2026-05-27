@@ -59,6 +59,8 @@ const AUTH_RATE_LIMITS = {
 };
 const RATE_LIMIT_SWEEP_INTERVAL_MS = 60 * 1000;
 const EMAIL_VERIFICATION_MESSAGE = "Check your email to verify your account before logging in.";
+const AUTH_INVALID_PASSWORD_MESSAGE = "The password is incorrect.";
+const AUTH_EMAIL_WAIT_FALLBACK_SECONDS = 60;
 const rateLimitBuckets = new Map();
 let lastRateLimitSweep = 0;
 
@@ -74,7 +76,8 @@ export default async function handler(request, response) {
   } catch (error) {
     console.error(error);
     if (Number.isInteger(error.status) && error.status >= 400 && error.status < 500) {
-      sendJson(response, error.status, { error: error.message || "Request failed." });
+      const headers = error.retryAfterSeconds ? { "Retry-After": String(error.retryAfterSeconds) } : {};
+      sendJson(response, error.status, { error: error.message || "Request failed." }, headers);
       return;
     }
     if (error.code === "CONFIGURATION_ERROR") {
@@ -145,7 +148,7 @@ async function handleApi(request, response, url) {
 
     const authResult = await loginWithSupabaseAuth(email, password);
     if (!authResult?.access_token || !authResult?.user) {
-      sendJson(response, 401, { error: "Invalid email or password." });
+      sendJson(response, 401, { error: AUTH_INVALID_PASSWORD_MESSAGE });
       return;
     }
     const user = await getOrCreateUserProfile(authResult.user);
@@ -336,6 +339,9 @@ async function signUpWithSupabaseAuth(request, { name, email, password }) {
       await resendSignupVerificationEmail(email, redirectTo);
       return { requiresEmailVerification: true };
     }
+    if (isSupabaseAuthEmailWaitError(error)) {
+      throw createAuthEmailWaitError(error);
+    }
     if (/sending confirmation email|send.*email|email.*send|smtp/i.test(error.message)) {
       const emailError = new Error("Unable to send the verification email. Check the Supabase SMTP settings and try again.");
       emailError.status = 502;
@@ -360,6 +366,9 @@ async function resendSignupVerificationEmail(email, redirectTo) {
       loginError.status = 409;
       throw loginError;
     }
+    if (isSupabaseAuthEmailWaitError(error)) {
+      throw createAuthEmailWaitError(error);
+    }
     if (/sending confirmation email|send.*email|email.*send|smtp/i.test(error.message)) {
       const emailError = new Error("Unable to send the verification email. Check the Supabase SMTP settings and try again.");
       emailError.status = 502;
@@ -382,8 +391,41 @@ async function loginWithSupabaseAuth(email, password) {
       verificationError.status = 403;
       throw verificationError;
     }
+    if (isSupabaseInvalidPasswordError(error)) {
+      const passwordError = new Error(AUTH_INVALID_PASSWORD_MESSAGE);
+      passwordError.status = 401;
+      throw passwordError;
+    }
+    if (isSupabaseAuthEmailWaitError(error)) {
+      throw createAuthEmailWaitError(error);
+    }
     throw error;
   }
+}
+
+function isSupabaseInvalidPasswordError(error) {
+  return error.status === 400 && /invalid.*(login|credential|password)|email or password/i.test(error.message || "");
+}
+
+function isSupabaseAuthEmailWaitError(error) {
+  return (
+    error.status === 429 ||
+    /security purposes|request this after|too many requests|rate limit/i.test(error.message || "")
+  );
+}
+
+function createAuthEmailWaitError(error) {
+  const seconds = getAuthEmailWaitSeconds(error.message);
+  const waitError = new Error(`Please wait ${seconds} seconds before requesting another verification email.`);
+  waitError.status = 429;
+  waitError.retryAfterSeconds = seconds;
+  return waitError;
+}
+
+function getAuthEmailWaitSeconds(message) {
+  const match = String(message || "").match(/after\s+(\d+)\s*seconds?/i);
+  const seconds = match ? Number(match[1]) : AUTH_EMAIL_WAIT_FALLBACK_SECONDS;
+  return Number.isFinite(seconds) && seconds > 0 ? Math.ceil(seconds) : AUTH_EMAIL_WAIT_FALLBACK_SECONDS;
 }
 
 async function refreshSupabaseSession(refreshToken) {
