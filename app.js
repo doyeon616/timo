@@ -88,7 +88,6 @@ const elements = {
   taskEditName: document.querySelector("#taskEditName"),
   taskEditTag: document.querySelector("#taskEditTag"),
   taskEditMinutes: document.querySelector("#taskEditMinutes"),
-  taskEditStatus: document.querySelector("#taskEditStatus"),
   taskEditNote: document.querySelector("#taskEditNote"),
   taskSaveButton: document.querySelector("#taskSaveButton"),
   taskDeleteButton: document.querySelector("#taskDeleteButton"),
@@ -1626,7 +1625,11 @@ function renderTasks() {
     node.querySelector("strong").textContent = task.name;
     renderTaskTag(node.querySelector(".task-tag"), task);
     node.querySelector(".task-estimate").textContent = formatMinutes(task.estimateMinutes);
-    node.querySelector("small").textContent = `${getTaskMetaPrefix(task)}${formatMinutes(task.estimateMinutes)} planned · ${formatSeconds(task.actualSeconds)} actual · ${statusLabel(task.status)}`;
+    const note = String(task.note || "").trim();
+    const noteNode = node.querySelector(".task-note");
+    noteNode.textContent = note;
+    noteNode.hidden = !note;
+    node.classList.toggle("has-note", Boolean(note));
     const checkbox = node.querySelector(".task-check");
     checkbox.checked = task.status === "done";
     checkbox.disabled = task.status === "active";
@@ -1718,8 +1721,6 @@ function openTaskModal(id) {
   elements.taskEditName.value = task.name;
   elements.taskEditTag.value = getTaskTag(task);
   elements.taskEditMinutes.value = String(task.estimateMinutes);
-  elements.taskEditStatus.value = task.status === "active" ? "pending" : task.status;
-  elements.taskEditStatus.disabled = task.status === "active";
   elements.taskEditNote.value = task.note || "";
   elements.taskDeleteButton.disabled = false;
   taskEditInitialValue = getTaskEditFormValue();
@@ -1740,7 +1741,6 @@ function getTaskEditFormValue() {
     name: elements.taskEditName.value.trim(),
     tag: elements.taskEditTag.value.trim(),
     estimateMinutes: Number(elements.taskEditMinutes.value),
-    status: elements.taskEditStatus.value,
     note: elements.taskEditNote.value.trim(),
   };
 }
@@ -1769,11 +1769,6 @@ function saveTaskEdit() {
   task.tag = tag;
   task.estimateMinutes = estimateMinutes;
   task.note = elements.taskEditNote.value.trim();
-
-  if (task.status !== "active") {
-    task.status = elements.taskEditStatus.value;
-    if (state.pendingReviewTaskId === task.id && task.status !== "review") state.pendingReviewTaskId = null;
-  }
 
   closeTaskModal();
   saveAndRender();
@@ -1865,8 +1860,7 @@ function renderTimeboxes() {
     return;
   }
 
-  const totalMinutes = tasks.reduce((sum, task) => sum + getTaskDurationMinutes(task), 0);
-  const durationLabel = tasks.some((task) => state.active?.taskId === task.id) ? "scheduled" : "recorded";
+  const totalMinutes = tasks.reduce((sum, task) => sum + getTaskActualMinutes(task), 0);
   const timelineStart = Math.min(TIMELINE_START_MINUTE, getTimelineStartMinute(tasks));
   const timelineEnd = Math.max(TIMELINE_END_MINUTE, getTimelineEndMinute(tasks));
   const trackMinutes = timelineEnd - timelineStart;
@@ -1875,14 +1869,14 @@ function renderTimeboxes() {
 
   elements.timeboxTrack.style.height = `${trackHeight}px`;
   elements.timeAxis.style.height = `${trackHeight}px`;
-  elements.timeboxMeta.textContent = `${formatTimeOfDay(timelineStart)} - ${formatTimeOfDay(timelineEnd)} · ${formatMinutes(totalMinutes)} ${durationLabel}`;
+  elements.timeboxMeta.textContent = `${formatTimeOfDay(timelineStart)} - ${formatTimeOfDay(timelineEnd)} · ${formatMinutes(totalMinutes)} recorded`;
   renderHourMarkers(timelineHeight, timelineStart, trackMinutes / 60);
   renderCurrentTimeLine(timelineStart, timelineHeight);
 
   for (const task of tasks) {
     const startMinute = getTaskStartMinute(task);
-    const durationMinutes = getTaskDurationMinutes(task);
-    const visibleDurationMinutes = Math.max(durationMinutes, task.status === "active" ? 1 : 0);
+    const durationMinutes = getTaskActualMinutes(task);
+    const visibleDurationMinutes = Math.max(durationMinutes, task.status === "active" ? 1 / 60 : 0);
     const endMinute = startMinute + visibleDurationMinutes;
     if (endMinute <= timelineStart || startMinute >= timelineEnd) continue;
 
@@ -1891,7 +1885,7 @@ function renderTimeboxes() {
     const offsetMinutes = visibleStartMinute - timelineStart;
     const block = document.createElement("button");
     const isShortTimebox = visibleDurationMinutes <= 10;
-    const minimumHeight = isShortTimebox ? 28 : 6;
+    const minimumHeight = task.status === "active" ? 8 : isShortTimebox ? 28 : 6;
     const height = Math.max((visibleEndMinute - visibleStartMinute) * PIXELS_PER_MINUTE, minimumHeight);
     const tag = getTaskTag(task);
     block.className = `timebox-block ${task.priority} ${task.status}`;
@@ -1910,7 +1904,7 @@ function renderTimeboxes() {
     block.classList.toggle("is-tiny", height <= 30);
     block.innerHTML = `
       <strong>${escapeHtml(task.name)}</strong>
-      <span>${formatMinutes(durationMinutes)}</span>
+      <span>${formatTimeboxActualDuration(task)}</span>
     `;
     block.addEventListener("click", () => {
       if (didDragTimebox) {
@@ -2064,14 +2058,12 @@ function getTaskStartMinute(task) {
   return getMinutesFromDate(Date.now());
 }
 
-function getTaskDurationMinutes(task) {
-  if (state.active?.taskId === task.id) {
-    const elapsedSeconds = Number(task.actualSeconds || 0);
-    const remainingSeconds = Number(state.active.remainingSeconds || 0);
-    return Math.max(1, (elapsedSeconds + remainingSeconds) / 60);
-  }
-
+function getTaskActualMinutes(task) {
   return Math.max(0, Number(task.actualSeconds || 0) / 60);
+}
+
+function formatTimeboxActualDuration(task) {
+  return formatElapsedDuration(Number(task.actualSeconds || 0));
 }
 
 function getTimelineStartMinute(tasks) {
@@ -2080,7 +2072,7 @@ function getTimelineStartMinute(tasks) {
 }
 
 function getTimelineEndMinute(tasks) {
-  const latest = Math.max(...tasks.map((task) => getTaskStartMinute(task) + Math.max(getTaskDurationMinutes(task), 1)));
+  const latest = Math.max(...tasks.map((task) => getTaskStartMinute(task) + Math.max(getTaskActualMinutes(task), 1)));
   return Math.ceil(latest / 60) * 60;
 }
 
@@ -2276,6 +2268,21 @@ function formatMinutes(minutes) {
 
 function formatSeconds(seconds) {
   return formatMinutes(Math.round(seconds / 60));
+}
+
+function formatElapsedDuration(seconds) {
+  const rounded = Math.max(0, Math.floor(seconds));
+  if (rounded < 60) return `${rounded}s`;
+
+  const totalMinutes = Math.floor(rounded / 60);
+  const remainingSeconds = rounded % 60;
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+
+  if (!hours && remainingSeconds) return `${minutes}m ${remainingSeconds}s`;
+  if (!hours) return `${minutes}m`;
+  if (minutes) return `${hours}h ${minutes}m`;
+  return `${hours}h`;
 }
 
 function formatClock(seconds) {

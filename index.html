@@ -8,9 +8,9 @@
     <link rel="manifest" href="./manifest.webmanifest" />
     <link rel="icon" href="./icon%202.svg" type="image/svg+xml" />
     <link rel="apple-touch-icon" href="./icon%202.svg" />
-    <link rel="stylesheet" href="./variables.css?v=239" />
-    <link rel="stylesheet" href="./theme.css?v=239" />
-    <link rel="stylesheet" href="./styles.css?v=239" />
+    <link rel="stylesheet" href="./variables.css?v=249" />
+    <link rel="stylesheet" href="./theme.css?v=249" />
+    <link rel="stylesheet" href="./styles.css?v=249" />
   </head>
   <body>
     <section class="login-screen is-hidden" id="loginScreen" aria-label="Login">
@@ -241,7 +241,6 @@
         <datalist id="tagOptions"></datalist>
         <select id="taskMinutes" aria-label="Estimated time">
           <option value="15">15m</option>
-          <option value="25">25m</option>
           <option value="30" selected>30m</option>
           <option value="45">45m</option>
           <option value="60">60m</option>
@@ -331,21 +330,11 @@
             <span>Estimated Time</span>
             <select id="taskEditMinutes">
               <option value="15">15m</option>
-              <option value="25">25m</option>
               <option value="30">30m</option>
               <option value="45">45m</option>
               <option value="60">60m</option>
               <option value="90">90m</option>
               <option value="120">120m</option>
-            </select>
-          </label>
-          <label>
-            <span>Status</span>
-            <select id="taskEditStatus">
-              <option value="pending">Pending</option>
-              <option value="review">Needs review</option>
-              <option value="paused">Paused</option>
-              <option value="done">Done</option>
             </select>
           </label>
         </div>
@@ -371,7 +360,7 @@
             <span class="task-tag"></span>
             <span class="task-estimate"></span>
           </div>
-          <small></small>
+          <small class="task-note" hidden></small>
         </div>
         <div class="task-actions">
           <button class="icon-button start" type="button" aria-label="Start timebox">
@@ -401,6 +390,6 @@
         });
       };
     </script>
-    <script src="./app.js?v=239" defer></script>
+    <script src="./app.js?v=249" defer></script>
   </body>
 </html>
