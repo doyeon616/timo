@@ -1625,11 +1625,6 @@ function renderTasks() {
     node.querySelector("strong").textContent = task.name;
     renderTaskTag(node.querySelector(".task-tag"), task);
     node.querySelector(".task-estimate").textContent = formatMinutes(task.estimateMinutes);
-    const note = String(task.note || "").trim();
-    const noteIcon = node.querySelector(".task-note-icon");
-    noteIcon.hidden = !note;
-    noteIcon.title = note;
-    node.classList.toggle("has-note", Boolean(note));
     const checkbox = node.querySelector(".task-check");
     checkbox.checked = task.status === "done";
     checkbox.disabled = task.status === "active";

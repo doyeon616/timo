@@ -1148,13 +1148,6 @@ button:disabled {
   filter: none;
 }
 
-.task-item.has-note {
-  align-items: start;
-  min-height: 48px;
-  padding-top: var(--spacing-6, 6px);
-  padding-bottom: var(--spacing-6, 6px);
-}
-
 .task-item:hover,
 .task-item.is-active,
 .task-item.is-selected {
@@ -1246,26 +1239,6 @@ button:disabled {
   font-weight: var(--font-weight-bold);
   text-overflow: ellipsis;
   white-space: nowrap;
-}
-
-.task-note-icon {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 18px;
-  height: 18px;
-  margin: var(--spacing-4) 0 0 22px;
-  color: color-mix(in srgb, var(--color-canvas-white) 62%, transparent);
-}
-
-.task-note-icon svg {
-  display: block;
-  width: 16px;
-  height: 16px;
-}
-
-.task-note-icon[hidden] {
-  display: none;
 }
 
 .todo-dock .task-actions {
