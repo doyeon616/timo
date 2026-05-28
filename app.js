@@ -1,3 +1,16 @@
+const CANONICAL_APP_ORIGIN = "https://timo.kr";
+const CANONICAL_REDIRECT_HOSTS = new Set(["www.timo.kr", "timo-rust.vercel.app"]);
+
+if (
+  window.location.protocol !== "file:" &&
+  (CANONICAL_REDIRECT_HOSTS.has(window.location.hostname) || window.location.hostname.endsWith(".vercel.app"))
+) {
+  window.location.replace(
+    `${CANONICAL_APP_ORIGIN}${window.location.pathname}${window.location.search}${window.location.hash}`,
+  );
+  throw new Error("Redirecting to canonical app origin.");
+}
+
 const STORAGE_KEY = "timo-day-v1";
 const AUTH_KEY = "timo-user-v1";
 const API_BASE = window.location.protocol === "file:" ? "" : "/api";

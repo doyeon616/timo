@@ -756,14 +756,26 @@ async function updateUserRole(user, role) {
   }
 
   const updatedAt = new Date().toISOString();
-  await supabaseRequest(`/timo_users?id=eq.${encodeURIComponent(user.id)}`, {
-    method: "PATCH",
-    body: {
-      role: nextRole,
-      updated_at: updatedAt,
-    },
-    headers: { Prefer: "return=minimal" },
-  });
+  try {
+    await supabaseRequest(`/timo_users?id=eq.${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      body: {
+        role: nextRole,
+        updated_at: updatedAt,
+      },
+      headers: { Prefer: "return=minimal" },
+    });
+  } catch (error) {
+    if (!isMissingSupabaseColumnError(error, "role")) throw error;
+    await supabaseRequest(`/timo_users?id=eq.${encodeURIComponent(user.id)}`, {
+      method: "PATCH",
+      body: {
+        profession: nextRole,
+        updated_at: updatedAt,
+      },
+      headers: { Prefer: "return=minimal" },
+    });
+  }
   return {
     ...user,
     role: nextRole,
@@ -1094,6 +1106,15 @@ function getOriginHost(origin) {
   } catch {
     return "";
   }
+}
+
+function isMissingSupabaseColumnError(error, columnName) {
+  const message = String(error?.message || "");
+  return (
+    message.includes(`'${columnName}' column`) ||
+    message.includes(`column ${columnName}`) ||
+    message.includes(`column "${columnName}"`)
+  );
 }
 
 function normalizeConfiguredValue(value, ...placeholders) {
